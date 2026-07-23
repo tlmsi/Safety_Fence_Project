@@ -2,21 +2,35 @@
 set -Eeuo pipefail
 
 RUN_DIR="$(
-    cd -- "$(
-        dirname -- "${BASH_SOURCE[0]}"
-    )"
+    cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
     pwd
 )"
 
+WS="$(
+    readlink -f "$RUN_DIR/.."
+)"
+
+SCRIPTS="$WS/src/sorting_cell_control/scripts"
+
+PLANNER="$SCRIPTS/red_automation.py"
+RUNTIME="$SCRIPTS/red_automation_runtime.py"
+
 source "$RUN_DIR/_common.sh"
 
-AUTOMATION="$REAL_WS/src/sorting_cell_control/scripts/red_automation.py"
-
-MODE="${1:-plan}"
+MODE="${1:-run}"
 
 case "$MODE" in
-    plan|run)
+    plan)
+        exec python3 -u \
+            "$PLANNER" \
+            plan
         ;;
+
+    run)
+        exec python3 -u \
+            "$RUNTIME"
+        ;;
+
     *)
         echo "Usage:"
         echo "  $0 plan"
@@ -24,15 +38,3 @@ case "$MODE" in
         exit 2
         ;;
 esac
-
-echo "========================================"
-echo "RED PICKUP / DROP AUTOMATION"
-echo "========================================"
-echo
-echo "Mode:"
-echo "  $MODE"
-echo
-
-exec python3 -u \
-    "$AUTOMATION" \
-    "$MODE"
