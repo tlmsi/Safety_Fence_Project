@@ -1,0 +1,34 @@
+# ROS 2 / colcon generated directories
+**/build/
+**/install/
+**/log/
+
+# Python generated files
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Temporary backups created during development
+*.before_*
+*.before*
+*.backup_*
+*.backup*
+*.bak
+*~
+
+# Old archived movement implementation
+Safety_Fence_ws/src/sorting_cell_control/archive/
+
+# Editor settings
+.vscode/
+.idea/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+
+# Temporary logs
+*.log
+/tmp/

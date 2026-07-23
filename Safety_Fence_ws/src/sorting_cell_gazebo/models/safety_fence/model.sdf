@@ -1,0 +1,295 @@
+<?xml version="1.0"?>
+
+<sdf version="1.10">
+
+  <model name="safety_fence">
+
+    <static>true</static>
+
+    <link name="fence_link">
+
+      <!-- Rear fence panel -->
+
+      <collision name="rear_panel_collision">
+        <pose>0 1.70 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>4.40 0.05 1.60</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="rear_panel_visual">
+        <pose>0 1.70 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>4.40 0.05 1.60</size>
+          </box>
+        </geometry>
+
+        <transparency>0.55</transparency>
+
+        <material>
+          <ambient>0.30 0.35 0.38 1</ambient>
+          <diffuse>0.40 0.45 0.48 1</diffuse>
+        </material>
+      </visual>
+
+      <!-- Left fence panel -->
+
+      <collision name="left_panel_collision">
+        <pose>-2.20 0 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.05 3.40 1.60</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="left_panel_visual">
+        <pose>-2.20 0 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.05 3.40 1.60</size>
+          </box>
+        </geometry>
+
+        <transparency>0.55</transparency>
+
+        <material>
+          <ambient>0.30 0.35 0.38 1</ambient>
+          <diffuse>0.40 0.45 0.48 1</diffuse>
+        </material>
+      </visual>
+
+      <!-- Right fence panel -->
+
+      <collision name="right_panel_collision">
+        <pose>2.20 0 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.05 3.40 1.60</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="right_panel_visual">
+        <pose>2.20 0 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.05 3.40 1.60</size>
+          </box>
+        </geometry>
+
+        <transparency>0.55</transparency>
+
+        <material>
+          <ambient>0.30 0.35 0.38 1</ambient>
+          <diffuse>0.40 0.45 0.48 1</diffuse>
+        </material>
+      </visual>
+
+      <!-- Front-left fence section -->
+
+      <collision name="front_left_panel_collision">
+        <pose>-1.45 -1.70 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.50 0.05 1.60</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="front_left_panel_visual">
+        <pose>-1.45 -1.70 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.50 0.05 1.60</size>
+          </box>
+        </geometry>
+
+        <transparency>0.55</transparency>
+
+        <material>
+          <ambient>0.30 0.35 0.38 1</ambient>
+          <diffuse>0.40 0.45 0.48 1</diffuse>
+        </material>
+      </visual>
+
+      <!-- Front-right fence section -->
+
+      <collision name="front_right_panel_collision">
+        <pose>1.45 -1.70 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.50 0.05 1.60</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="front_right_panel_visual">
+        <pose>1.45 -1.70 0.90 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.50 0.05 1.60</size>
+          </box>
+        </geometry>
+
+        <transparency>0.55</transparency>
+
+        <material>
+          <ambient>0.30 0.35 0.38 1</ambient>
+          <diffuse>0.40 0.45 0.48 1</diffuse>
+        </material>
+      </visual>
+
+      <!-- Yellow structural posts -->
+
+      <collision name="rear_left_post_collision">
+        <pose>-2.20 1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="rear_left_post_visual">
+        <pose>-2.20 1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="rear_right_post_collision">
+        <pose>2.20 1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="rear_right_post_visual">
+        <pose>2.20 1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="front_left_corner_post_collision">
+        <pose>-2.20 -1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="front_left_corner_post_visual">
+        <pose>-2.20 -1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="front_right_corner_post_collision">
+        <pose>2.20 -1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="front_right_corner_post_visual">
+        <pose>2.20 -1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="gate_left_post_collision">
+        <pose>-0.65 -1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="gate_left_post_visual">
+        <pose>-0.65 -1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="gate_right_post_collision">
+        <pose>0.65 -1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="gate_right_post_visual">
+        <pose>0.65 -1.70 0.95 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.10 0.10 1.90</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+    </link>
+
+  </model>
+
+</sdf>
+

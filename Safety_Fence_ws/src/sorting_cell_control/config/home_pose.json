@@ -1,0 +1,28 @@
+{
+  "name": "home",
+  "description": "Verified startup pose captured from the Safety Fence simulation.",
+  "joint_names": [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint"
+  ],
+  "positions": [
+    1.1581151301955903e-07,
+    -1.5699999536111664,
+    -7.252867953283743e-08,
+    -1.569999763383839,
+    -1.2272032080018705e-07,
+    -2.1060715259706725e-07
+  ],
+  "positions_by_name": {
+    "shoulder_pan_joint": 1.1581151301955903e-07,
+    "shoulder_lift_joint": -1.5699999536111664,
+    "elbow_joint": -7.252867953283743e-08,
+    "wrist_1_joint": -1.569999763383839,
+    "wrist_2_joint": -1.2272032080018705e-07,
+    "wrist_3_joint": -2.1060715259706725e-07
+  }
+}

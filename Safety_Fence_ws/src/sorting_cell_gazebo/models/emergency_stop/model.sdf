@@ -1,0 +1,153 @@
+<?xml version="1.0"?>
+
+<sdf version="1.10">
+
+  <model name="emergency_stop">
+
+    <static>true</static>
+
+    <link name="emergency_stop_link">
+
+      <!-- Left pedestal -->
+
+      <collision name="left_pedestal_collision">
+        <pose>-1.45 0 0.60 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.20 0.20 1.20</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="left_pedestal_visual">
+        <pose>-1.45 0 0.60 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.20 0.20 1.20</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.12 0.12 0.14 1</ambient>
+          <diffuse>0.20 0.20 0.22 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="left_yellow_plate_visual">
+        <pose>-1.45 -0.12 1.08 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.24 0.05 0.24</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.70 0.02 1</ambient>
+          <diffuse>1.00 0.82 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="left_button_collision">
+        <pose>-1.45 -0.19 1.08 1.5708 0 0</pose>
+
+        <geometry>
+          <cylinder>
+            <radius>0.085</radius>
+            <length>0.10</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <visual name="left_button_visual">
+        <pose>-1.45 -0.19 1.08 1.5708 0 0</pose>
+
+        <geometry>
+          <cylinder>
+            <radius>0.085</radius>
+            <length>0.10</length>
+          </cylinder>
+        </geometry>
+
+        <material>
+          <ambient>0.75 0.01 0.01 1</ambient>
+          <diffuse>0.95 0.02 0.02 1</diffuse>
+        </material>
+      </visual>
+
+      <!-- Right pedestal -->
+
+      <collision name="right_pedestal_collision">
+        <pose>1.45 0 0.60 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.20 0.20 1.20</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="right_pedestal_visual">
+        <pose>1.45 0 0.60 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.20 0.20 1.20</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.12 0.12 0.14 1</ambient>
+          <diffuse>0.20 0.20 0.22 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="right_yellow_plate_visual">
+        <pose>1.45 -0.12 1.08 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.24 0.05 0.24</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.70 0.02 1</ambient>
+          <diffuse>1.00 0.82 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="right_button_collision">
+        <pose>1.45 -0.19 1.08 1.5708 0 0</pose>
+
+        <geometry>
+          <cylinder>
+            <radius>0.085</radius>
+            <length>0.10</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <visual name="right_button_visual">
+        <pose>1.45 -0.19 1.08 1.5708 0 0</pose>
+
+        <geometry>
+          <cylinder>
+            <radius>0.085</radius>
+            <length>0.10</length>
+          </cylinder>
+        </geometry>
+
+        <material>
+          <ambient>0.75 0.01 0.01 1</ambient>
+          <diffuse>0.95 0.02 0.02 1</diffuse>
+        </material>
+      </visual>
+
+    </link>
+
+  </model>
+
+</sdf>

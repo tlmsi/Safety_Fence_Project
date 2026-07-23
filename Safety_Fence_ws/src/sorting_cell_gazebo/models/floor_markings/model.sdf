@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+
+<sdf version="1.10">
+
+  <model name="floor_markings">
+
+    <static>true</static>
+
+    <link name="floor_markings_link">
+
+      <visual name="front_warning_strip">
+        <pose>0 -1.92 0.006 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>4.85 0.16 0.012</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.60 0.01 1</ambient>
+          <diffuse>1.00 0.75 0.02 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="rear_warning_strip">
+        <pose>0 1.92 0.006 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>4.85 0.16 0.012</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.60 0.01 1</ambient>
+          <diffuse>1.00 0.75 0.02 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="left_warning_strip">
+        <pose>-2.42 0 0.006 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.16 3.68 0.012</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.60 0.01 1</ambient>
+          <diffuse>1.00 0.75 0.02 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="right_warning_strip">
+        <pose>2.42 0 0.006 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.16 3.68 0.012</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.60 0.01 1</ambient>
+          <diffuse>1.00 0.75 0.02 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="operator_entrance_zone">
+        <pose>0 -2.12 0.007 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.35 0.20 0.014</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.80 0.08 0.01 1</ambient>
+          <diffuse>1.00 0.20 0.02 1</diffuse>
+        </material>
+      </visual>
+
+    </link>
+
+  </model>
+
+</sdf>

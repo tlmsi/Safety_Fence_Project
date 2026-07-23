@@ -1,0 +1,206 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+
+  <model name="conveyor">
+
+    <static>true</static>
+
+    <!-- ================================================== -->
+    <!-- Moving contact surface                             -->
+    <!-- ================================================== -->
+
+    <link name="belt_link">
+
+      <collision name="belt_collision">
+
+        <pose>0 0 0.075 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.25 0.42 0.07</size>
+          </box>
+        </geometry>
+
+        <surface>
+
+          <friction>
+            <ode>
+
+              <!-- Across-belt friction -->
+              <mu>0.8</mu>
+
+              <!-- Along-belt traction -->
+              <mu2>100</mu2>
+
+              <fdir1>0 1 0</fdir1>
+
+            </ode>
+          </friction>
+
+          <contact>
+            <ode>
+              <kp>1000000</kp>
+              <kd>100</kd>
+            </ode>
+          </contact>
+
+        </surface>
+
+      </collision>
+
+      <visual name="belt_visual">
+
+        <pose>0 0 0.075 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.25 0.42 0.07</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.08 0.08 0.09 1</diffuse>
+          <specular>0.15 0.15 0.15 1</specular>
+        </material>
+
+      </visual>
+
+    </link>
+
+
+    <!-- ================================================== -->
+    <!-- Static conveyor frame                              -->
+    <!-- ================================================== -->
+
+    <link name="frame_link">
+
+      <collision name="left_rail_collision">
+        <pose>0 0.245 0.15 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>1.25 0.07 0.16</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="left_rail_visual">
+        <pose>0 0.245 0.15 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>1.25 0.07 0.16</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.75 0.75 0.78 1</ambient>
+          <diffuse>0.75 0.75 0.78 1</diffuse>
+        </material>
+      </visual>
+
+
+      <collision name="right_rail_collision">
+        <pose>0 -0.245 0.15 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>1.25 0.07 0.16</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="right_rail_visual">
+        <pose>0 -0.245 0.15 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>1.25 0.07 0.16</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.75 0.75 0.78 1</ambient>
+          <diffuse>0.75 0.75 0.78 1</diffuse>
+        </material>
+      </visual>
+
+
+      <visual name="input_roller_visual">
+        <pose>-0.57 0 0.09 1.5708 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.06</radius>
+            <length>0.40</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.16 0.16 0.17 1</ambient>
+          <diffuse>0.16 0.16 0.17 1</diffuse>
+        </material>
+      </visual>
+
+
+      <visual name="output_roller_visual">
+        <pose>0.57 0 0.09 1.5708 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.06</radius>
+            <length>0.40</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.16 0.16 0.17 1</ambient>
+          <diffuse>0.16 0.16 0.17 1</diffuse>
+        </material>
+      </visual>
+
+
+      <!-- Green pickup-zone marker -->
+      <visual name="pickup_zone_visual">
+
+        <pose>0.44 0 0.115 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.24 0.34 0.008</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.65 0.65 0.65 0.65</ambient>
+          <diffuse>0.65 0.65 0.65 0.65</diffuse>
+        </material>
+
+        <transparency>0.28</transparency>
+
+      </visual>
+
+    </link>
+
+
+    <!-- ================================================== -->
+    <!-- Gazebo conveyor controller                         -->
+    <!-- ================================================== -->
+
+    <plugin
+      filename="gz-sim-track-controller-system"
+      name="gz::sim::systems::TrackController">
+
+      <link>belt_link</link>
+
+      <!-- Belt direction is local +X -->
+      <track_orientation>0 0 0</track_orientation>
+
+      <velocity_topic>/conveyor/cmd_vel</velocity_topic>
+
+      <odometry_topic>/conveyor/odometry</odometry_topic>
+
+      <odometry_publish_frequency>20</odometry_publish_frequency>
+
+      <min_velocity>-0.40</min_velocity>
+      <max_velocity>0.40</max_velocity>
+
+      <min_acceleration>-0.50</min_acceleration>
+      <max_acceleration>0.50</max_acceleration>
+
+    </plugin>
+
+  </model>
+
+</sdf>

@@ -1,0 +1,28 @@
+{
+  "name": "phase_3_test_pose",
+  "description": "Temporary pose generated from home. Only wrist_3_joint differs by 0.20 rad.",
+  "joint_names": [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint"
+  ],
+  "positions": [
+    1.1581151301955903e-07,
+    -1.5699999536111664,
+    -7.252867953283743e-08,
+    -1.569999763383839,
+    -1.2272032080018705e-07,
+    0.1999997893928474
+  ],
+  "positions_by_name": {
+    "shoulder_pan_joint": 1.1581151301955903e-07,
+    "shoulder_lift_joint": -1.5699999536111664,
+    "elbow_joint": -7.252867953283743e-08,
+    "wrist_1_joint": -1.569999763383839,
+    "wrist_2_joint": -1.2272032080018705e-07,
+    "wrist_3_joint": 0.1999997893928474
+  }
+}

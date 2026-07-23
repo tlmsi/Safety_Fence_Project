@@ -1,0 +1,142 @@
+<?xml version="1.0"?>
+
+<sdf version="1.10">
+
+  <model name="safety_gate">
+
+    <static>true</static>
+
+    <link name="gate_link">
+
+      <collision name="gate_panel_collision">
+        <pose>0 0 0.88 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.20 0.05 1.50</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="gate_panel_visual">
+        <pose>0 0 0.88 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.20 0.05 1.50</size>
+          </box>
+        </geometry>
+
+        <transparency>0.55</transparency>
+
+        <material>
+          <ambient>0.30 0.35 0.38 1</ambient>
+          <diffuse>0.40 0.45 0.48 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="left_frame_collision">
+        <pose>-0.56 0 0.88 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.08 0.08 1.55</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="left_frame_visual">
+        <pose>-0.56 0 0.88 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.08 0.08 1.55</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="right_frame_collision">
+        <pose>0.56 0 0.88 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.08 0.08 1.55</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="right_frame_visual">
+        <pose>0.56 0 0.88 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.08 0.08 1.55</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="top_frame_collision">
+        <pose>0 0 1.66 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.20 0.08 0.09</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="top_frame_visual">
+        <pose>0 0 1.66 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>1.20 0.08 0.09</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.90 0.60 0.02 1</ambient>
+          <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+      <collision name="handle_collision">
+        <pose>0.42 -0.08 0.95 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.05 0.12 0.18</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="handle_visual">
+        <pose>0.42 -0.08 0.95 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.05 0.12 0.18</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.03 0.03 0.03 1</ambient>
+          <diffuse>0.08 0.08 0.08 1</diffuse>
+        </material>
+      </visual>
+
+    </link>
+
+  </model>
+
+</sdf>
