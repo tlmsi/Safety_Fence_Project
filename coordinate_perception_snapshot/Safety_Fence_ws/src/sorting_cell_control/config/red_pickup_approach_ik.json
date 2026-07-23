@@ -1,0 +1,44 @@
+{
+  "name": "red_pickup_approach_ik",
+  "description": "IK solution for the red pickup approach target, calculated from Safety Fence environment geometry.",
+  "target_frame": "world",
+  "target_suction_tip_xyz": [
+    -0.21000000000000002,
+    0.45,
+    1.132
+  ],
+  "red_contact_xyz": [
+    -0.21000000000000002,
+    0.45,
+    0.982
+  ],
+  "joint_names": [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint"
+  ],
+  "positions": [
+    -0.6626236117583887,
+    -1.7692571434813378,
+    -1.650124413463266,
+    -1.2930387700518562,
+    1.570777762495105,
+    -0.6626226570832748
+  ],
+  "positions_by_name": {
+    "shoulder_pan_joint": -0.6626236117583887,
+    "shoulder_lift_joint": -1.7692571434813378,
+    "elbow_joint": -1.650124413463266,
+    "wrist_1_joint": -1.2930387700518562,
+    "wrist_2_joint": 1.570777762495105,
+    "wrist_3_joint": -0.6626226570832748
+  },
+  "validation": {
+    "position_error_m": 2.993966090975815e-06,
+    "orientation_error_rad": 3.644392062946277e-05,
+    "tool_yaw_rad": 3.141592653589793
+  }
+}

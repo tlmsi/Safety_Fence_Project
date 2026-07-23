@@ -26,12 +26,6 @@ case "$MODE" in
             plan
         ;;
 
-    check)
-        exec python3 -u \
-            "$RUNTIME" \
-            --solve-only
-        ;;
-
     run)
         exec python3 -u \
             "$RUNTIME"
@@ -40,7 +34,6 @@ case "$MODE" in
     *)
         echo "Usage:"
         echo "  $0 plan"
-        echo "  $0 check"
         echo "  $0 run"
         exit 2
         ;;

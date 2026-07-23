@@ -1,0 +1,33 @@
+{
+  "name": "red_drop_release_1mm",
+  "target_frame": "world",
+  "target_suction_tip_xyz": [
+    0.57,
+    -0.39999999999999997,
+    1.081
+  ],
+  "joint_names": [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint"
+  ],
+  "positions": [
+    -3.670705162195224,
+    -1.8181562635186366,
+    -1.7268524094706583,
+    -1.1673870216615885,
+    1.5707969494803924,
+    -3.670705161975512
+  ],
+  "positions_by_name": {
+    "shoulder_pan_joint": -3.670705162195224,
+    "shoulder_lift_joint": -1.8181562635186366,
+    "elbow_joint": -1.7268524094706583,
+    "wrist_1_joint": -1.1673870216615885,
+    "wrist_2_joint": 1.5707969494803924,
+    "wrist_3_joint": -3.670705161975512
+  }
+}
