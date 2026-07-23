@@ -34,6 +34,7 @@ WAYPOINTS = CONFIG / 'red_automation'
 
 IK_FILE = HERE / 'red_pickup_ik_solver.py'
 EXECUTOR = HERE / 'move_to_pose.py'
+THROUGH_EXECUTOR = HERE / 'move_through_poses.py'
 WAITER = HERE / 'wait_for_box_present.py'
 
 HOME_FILE = CONFIG / 'home_pose.json'
@@ -192,7 +193,7 @@ def find_include(
     )
 
 
-def box_height(
+def red_box_size(
     world_root,
 ):
     for model in world_root.iter('model'):
@@ -213,13 +214,16 @@ def box_height(
                 item is not None
                 and item.text
             ):
-                return nums(
-                    item.text,
-                    3,
-                )[2]
+                return np.array(
+                    nums(
+                        item.text,
+                        3,
+                    ),
+                    dtype=float,
+                )
 
     raise RuntimeError(
-        'Cannot read red box height.'
+        'Cannot read red-box dimensions.'
     )
 
 
@@ -290,22 +294,60 @@ def drop_geometry(
         + size[2] / 2.0
     )
 
-    # The suction tip remains on the top surface
+    red_size = red_box_size(
+        world_root
+    )
+
+    # Place the box in the inner corner of the red bin,
+    # closest to the robot.
+    #
+    # Keep the complete box inside the bin footprint and
+    # leave 10 mm clearance from each selected edge.
+    edge_clearance = 0.010
+
+    corner_offset_x = -(
+        size[0] / 2.0
+        - red_size[0] / 2.0
+        - edge_clearance
+    )
+
+    corner_offset_y = (
+        size[1] / 2.0
+        - red_size[1] / 2.0
+        - edge_clearance
+    )
+
+    if (
+        corner_offset_x >= 0.0
+        or corner_offset_y <= 0.0
+    ):
+        raise RuntimeError(
+            'The red box does not fit inside the '
+            'requested red-bin corner clearance.'
+        )
+
+    # The suction tip remains attached to the top surface
     # of the box while carrying it.
     #
-    # Therefore:
+    # At release:
     #
-    # tip Z =
-    # bin surface
-    # + box height
-    # + required 1 mm gap
+    # box bottom =
+    # bin surface + 1 mm
+    #
+    # suction-tip Z =
+    # bin surface + box height + 1 mm
     release_local = np.array(
         [
-            pose[0],
-            pose[1],
+            pose[0]
+            + corner_offset_x,
+
+            pose[1]
+            + corner_offset_y,
+
             surface_local_z
-            + box_height(world_root)
+            + red_size[2]
             + gap,
+
             1.0,
         ],
         dtype=float,
@@ -617,6 +659,7 @@ def generate_plan():
     for required_file in (
         IK_FILE,
         EXECUTOR,
+        THROUGH_EXECUTOR,
         WAITER,
         HOME_FILE,
         WORLD,
@@ -1007,7 +1050,6 @@ def generate_plan():
             'drop_approach',
             'middle',
             'pickup_approach',
-            'home',
         ],
 
         'tool_yaw_rad': yaw,
@@ -1039,6 +1081,14 @@ def generate_plan():
 
             'drop_gap_box_bottom_to_bin_m': (
                 0.001
+            ),
+
+            'drop_location': (
+                'red_bin_inner_corner_closest_to_robot'
+            ),
+
+            'drop_edge_clearance_m': (
+                0.010
             ),
         },
 
@@ -1136,47 +1186,133 @@ def move(
     )
 
 
+def move_through(
+    paths,
+    segment_times,
+    label,
+):
+    if len(paths) != len(segment_times):
+        raise RuntimeError(
+            'Continuous path and timing lengths differ.'
+        )
+
+    run_command(
+        [
+            sys.executable,
+            '-u',
+            str(THROUGH_EXECUTOR),
+            '--segment-times',
+            ','.join(
+                str(value)
+                for value in segment_times
+            ),
+            *paths,
+        ],
+        label,
+    )
+
+
 def suction(
     action,
 ):
+    if action not in (
+        'attach',
+        'detach',
+    ):
+        raise RuntimeError(
+            f'Invalid suction action: {action}'
+        )
+
+    topic = f'/suction/red/{action}'
+
     print()
     print(
-        f'=== RED SUCTION '
-        f'{action.upper()} ==='
+        f'Suction command: {action.upper()}'
     )
 
-    success = False
+    result = subprocess.run(
+        [
+            'gz',
+            'topic',
+            '-t',
+            topic,
+            '-m',
+            'gz.msgs.Empty',
+            '-p',
+            'unused: true',
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
 
-    for _ in range(8):
-        result = subprocess.run(
-            [
-                'gz',
-                'topic',
-                '-t',
-                f'/suction/red/{action}',
-                '-m',
-                'gz.msgs.Empty',
-                '-p',
-                'unused: true',
-            ],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-        success = (
-            success
-            or result.returncode == 0
-        )
-
-        time.sleep(0.08)
-
-    if not success:
+    if result.returncode != 0:
         raise RuntimeError(
-            f'Suction {action} failed.'
+            f'Suction {action} failed: '
+            f'{result.stderr.strip()}'
         )
 
-    time.sleep(1.0)
+    # Minimal time for Gazebo to process the command.
+    time.sleep(0.10)
+
+
+
+
+def load_saved_plan():
+    if not PATH_FILE.is_file():
+        raise RuntimeError(
+            'No saved automation path exists. Run plan first:\n'
+            f'  {PATH_FILE}'
+        )
+
+    try:
+        plan = json.loads(
+            PATH_FILE.read_text()
+        )
+    except Exception as error:
+        raise RuntimeError(
+            f'Could not read saved path: {error}'
+        ) from error
+
+    pose_files = plan.get(
+        'pose_files'
+    )
+
+    if not isinstance(pose_files, dict):
+        raise RuntimeError(
+            'Saved path has no valid pose_files section.'
+        )
+
+    for name, filename in pose_files.items():
+        pose_path = Path(
+            filename
+        ).expanduser()
+
+        if not pose_path.is_absolute():
+            pose_path = (
+                PATH_FILE.parent
+                / pose_path
+            ).resolve()
+
+        if not pose_path.is_file():
+            raise RuntimeError(
+                f'Saved pose file missing: '
+                f'{name}: {pose_path}'
+            )
+
+        pose_files[name] = str(
+            pose_path
+        )
+
+    print()
+    print(
+        'Loaded previously validated path.'
+    )
+    print(
+        'IK calculation skipped.'
+    )
+
+    return plan
 
 
 def execute(
@@ -1197,78 +1333,75 @@ def execute(
         'Wait for box-present=true',
     )
 
-    move(
-        files['home'],
-        4.0,
-        'Initial/home pose',
-    )
-
-    move(
-        files['pickup_approach'],
-        6.0,
-        'Above pickup zone',
-    )
-
-    move(
-        files['pickup_touch'],
-        3.0,
-        'Touch red-box surface',
+    # Continuous motion from the robot's current
+    # initial position to the box.
+    #
+    # The pickup approach is only a pass-through
+    # waypoint. The robot stops at pickup_touch
+    # because attachment is required there.
+    move_through(
+        [
+            files['pickup_approach'],
+            files['pickup_touch'],
+        ],
+        [
+            2.6,
+            1.4,
+        ],
+        'Continuous motion to red-box pickup',
     )
 
     suction(
         'attach'
     )
 
-    move(
-        files['pickup_approach'],
-        3.0,
-        'Lift above pickup zone',
-    )
-
-    move(
-        files['middle'],
-        6.0,
-        'Middle waypoint with red box',
-    )
-
-    move(
-        files['drop_approach'],
-        6.0,
-        'Above red drop zone',
-    )
-
-    move(
-        files['drop_release'],
-        3.0,
-        'Box bottom 1 mm above bin',
+    # Continuous carrying trajectory.
+    #
+    # Pickup approach, middle and drop approach
+    # are all pass-through waypoints.
+    # The robot stops only at drop_release.
+    move_through(
+        [
+            files['pickup_approach'],
+            files['middle'],
+            files['drop_approach'],
+            files['drop_release'],
+        ],
+        [
+            1.4,
+            2.3,
+            2.3,
+            1.4,
+        ],
+        'Continuous red-box transfer',
     )
 
     suction(
         'detach'
     )
 
-    move(
-        files['drop_approach'],
-        3.0,
-        'Lift above red drop zone',
+    # Continuous return trajectory.
+    #
+    # Drop approach and middle are pass-through
+    # waypoints. The final stop is above pickup.
+    move_through(
+        [
+            files['drop_approach'],
+            files['middle'],
+            files['pickup_approach'],
+        ],
+        [
+            1.4,
+            2.3,
+            2.3,
+        ],
+        'Continuous return above pickup zone',
     )
 
-    move(
-        files['middle'],
-        6.0,
-        'Reverse to middle waypoint',
-    )
-
-    move(
-        files['pickup_approach'],
-        6.0,
-        'Reverse above pickup zone',
-    )
-
-    move(
-        files['home'],
-        6.0,
-        'Return to initial/home pose',
+    print()
+    print(
+        'Robot final position: '
+        'above the pickup zone.'
     )
 
 
@@ -1321,7 +1454,21 @@ def print_plan(
 
     print()
     print(
+        'Drop location: '
+        'inner red-bin corner closest to robot'
+    )
+
+    print(
+        'Bin-edge clearance: 10.0 mm'
+    )
+
+    print(
         'Drop gap: 1.0 mm'
+    )
+
+    print(
+        'Final robot waypoint: '
+        'above pickup zone'
     )
 
     print(
@@ -1347,8 +1494,10 @@ def main():
     arguments = parser.parse_args()
 
     try:
-        plan = generate_plan()
-
+        if arguments.mode == 'plan':
+            plan = generate_plan()
+        else:
+            plan = load_saved_plan()
         print_plan(
             plan
         )
