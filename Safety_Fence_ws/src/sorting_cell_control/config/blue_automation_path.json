@@ -1,0 +1,75 @@
+{
+  "name": "blue_automation",
+  "sequence": [
+    "home",
+    "pickup_approach",
+    "pickup_touch",
+    "attach_blue",
+    "pickup_approach",
+    "middle",
+    "drop_approach",
+    "drop_release",
+    "detach_blue",
+    "drop_approach",
+    "middle",
+    "pickup_approach"
+  ],
+  "tool_yaw_rad": 3.141592653589793,
+  "geometry": {
+    "pickup_approach_xyz": [
+      -0.21000000000000002,
+      0.45,
+      1.132
+    ],
+    "pickup_touch_xyz": [
+      -0.21000000000000002,
+      0.45,
+      0.97
+    ],
+    "middle_xyz": [
+      0.14003270243902938,
+      0.6380627449228373,
+      1.261
+    ],
+    "drop_approach_xyz": [
+      0.57,
+      0.5599999999999999,
+      1.2309999999999999
+    ],
+    "drop_release_tip_xyz": [
+      0.57,
+      0.5599999999999999,
+      1.081
+    ],
+    "blue_bin_surface_z": 1.02,
+    "drop_gap_box_bottom_to_bin_m": 0.001,
+    "drop_location": "blue_bin_inner_corner_closest_to_robot",
+    "drop_edge_clearance_m": 0.01
+  },
+  "pose_files": {
+    "home": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/home_pose.json",
+    "pickup_approach": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/blue_automation/01_pickup_approach.json",
+    "pickup_touch": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/blue_automation/02_pickup_touch.json",
+    "middle": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/blue_automation/03_middle.json",
+    "drop_approach": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/blue_automation/04_drop_approach.json",
+    "drop_release": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/blue_automation/05_drop_release_1mm.json"
+  },
+  "validation": {
+    "pickup_touch": {
+      "position_error_m": 3.171048634890631e-07,
+      "orientation_error_rad": 5.740871769164383e-06
+    },
+    "middle": {
+      "position_error_m": 1.7733849578557148e-06,
+      "orientation_error_rad": 1.8457054662478672e-05
+    },
+    "drop_approach": {
+      "position_error_m": 1.3279528879095587e-06,
+      "orientation_error_rad": 1.211500606358656e-05
+    },
+    "drop_release": {
+      "position_error_m": 5.490152257921328e-07,
+      "orientation_error_rad": 8.165226546825239e-06
+    }
+  }
+}

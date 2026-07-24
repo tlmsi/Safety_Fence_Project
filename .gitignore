@@ -9,7 +9,6 @@
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
-
 # Temporary backups created during development
 *.before_*
 *.before*
@@ -17,18 +16,19 @@
 *.backup*
 *.bak
 *~
-
 # Old archived movement implementation
 Safety_Fence_ws/src/sorting_cell_control/archive/
-
 # Editor settings
 .vscode/
 .idea/
-
 # Operating-system files
 .DS_Store
 Thumbs.db
-
 # Temporary logs
 *.log
 /tmp/
+# Safety Fence generated files
+Safety_Fence_ws/build/
+Safety_Fence_ws/install/
+Safety_Fence_ws/log/
+coordinate_perception_snapshot.tar.gz

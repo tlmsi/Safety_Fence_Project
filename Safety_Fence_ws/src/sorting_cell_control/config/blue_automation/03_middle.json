@@ -1,0 +1,33 @@
+{
+  "name": "blue_middle_waypoint",
+  "target_frame": "world",
+  "target_suction_tip_xyz": [
+    0.14003270243902938,
+    0.6380627449228373,
+    1.261
+  ],
+  "joint_names": [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint"
+  ],
+  "positions": [
+    -1.344733183834475,
+    -1.890807954370809,
+    -1.162258605406728,
+    -1.6593096124630484,
+    1.5707830580584634,
+    -1.3447324316883282
+  ],
+  "positions_by_name": {
+    "shoulder_pan_joint": -1.344733183834475,
+    "shoulder_lift_joint": -1.890807954370809,
+    "elbow_joint": -1.162258605406728,
+    "wrist_1_joint": -1.6593096124630484,
+    "wrist_2_joint": 1.5707830580584634,
+    "wrist_3_joint": -1.3447324316883282
+  }
+}
