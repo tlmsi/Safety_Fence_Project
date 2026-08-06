@@ -8,6 +8,7 @@ from typing import Dict, List
 import rclpy
 
 from moveit_msgs.action import (
+    ExecuteTrajectory,
     MoveGroup,
     MoveGroupSequence,
 )
@@ -16,12 +17,28 @@ from moveit_msgs.msg import (
     JointConstraint,
     MoveItErrorCodes,
     MotionSequenceItem,
+    RobotTrajectory,
 )
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 from moveit_attached_box import CarriedBoxSceneManager
+from red_bin_placement import (
+    BIN_SURFACE_Z,
+    mark_red_slot_occupied,
+    restore_occupied_red_boxes,
+    solve_dynamic_red_drop,
+)
+
+from moveit_trajectory_cache import (
+    RED_RETURN_CACHE,
+    RED_TRANSFER_CACHE,
+    load_trajectory,
+    save_trajectory,
+    trajectory_duration,
+    trajectory_start_error,
+)
 
 from red_automation_runtime import (
     load_cached_plan,
@@ -81,6 +98,12 @@ class RedMoveItRuntime(Node):
             self,
             MoveGroupSequence,
             '/sequence_move_group',
+        )
+
+        self.execute_trajectory_client = ActionClient(
+            self,
+            ExecuteTrajectory,
+            '/execute_trajectory',
         )
 
         self.carried_box = (
@@ -218,11 +241,32 @@ class RedMoveItRuntime(Node):
 
         return goal
 
+    def wait_for_execute_trajectory(
+        self,
+        timeout: float = 30.0,
+    ) -> None:
+        self.get_logger().info(
+            'Waiting for MoveIt /execute_trajectory...'
+        )
+
+        if not self.execute_trajectory_client.wait_for_server(
+            timeout_sec=timeout
+        ):
+            raise RuntimeError(
+                'MoveIt /execute_trajectory '
+                'action server is unavailable.'
+            )
+
+        self.get_logger().info(
+            'MoveIt trajectory execution '
+            'action server is ready.'
+        )
+
     def execute_pose(
         self,
         pose_name: str,
         positions: List[float],
-    ) -> None:
+    ) -> RobotTrajectory:
         self.wait_for_joint_state()
 
         self.get_logger().info(
@@ -314,17 +358,123 @@ class RedMoveItRuntime(Node):
                 f'for "{pose_name}".'
             )
 
+        return result.planned_trajectory
+
+    def execute_cached_trajectory(
+        self,
+        label: str,
+        cache_path,
+        start_tolerance: float = 0.05,
+    ) -> None:
+        self.wait_for_joint_state()
+
+        trajectory, document = load_trajectory(
+            cache_path
+        )
+
+        start_error = trajectory_start_error(
+            trajectory,
+            self.current_positions,
+        )
+
+        self.get_logger().info(
+            f'Cached trajectory start-state error '
+            f'for {label}: '
+            f'{start_error:.6f} rad'
+        )
+
+        if start_error > start_tolerance:
+            raise RuntimeError(
+                f'Cached trajectory "{label}" cannot '
+                'start safely. Maximum joint error is '
+                f'{start_error:.6f} rad; allowed error is '
+                f'{start_tolerance:.6f} rad.'
+            )
+
+        point_count = len(
+            trajectory.joint_trajectory.points
+        )
+
+        duration = trajectory_duration(
+            trajectory
+        )
+
+        self.get_logger().info(
+            f'Executing cached trajectory: {label} '
+            f'({point_count} points, '
+            f'{duration:.3f} s)'
+        )
+
+        goal = ExecuteTrajectory.Goal()
+        goal.trajectory = trajectory
+
+        send_future = (
+            self.execute_trajectory_client
+            .send_goal_async(goal)
+        )
+
+        rclpy.spin_until_future_complete(
+            self,
+            send_future,
+        )
+
+        goal_handle = send_future.result()
+
+        if (
+            goal_handle is None
+            or not goal_handle.accepted
+        ):
+            raise RuntimeError(
+                f'MoveIt rejected cached trajectory: '
+                f'{label}'
+            )
+
+        result_future = (
+            goal_handle.get_result_async()
+        )
+
+        rclpy.spin_until_future_complete(
+            self,
+            result_future,
+        )
+
+        wrapped_result = result_future.result()
+
+        if wrapped_result is None:
+            raise RuntimeError(
+                f'MoveIt returned no cached-trajectory '
+                f'result for: {label}'
+            )
+
+        result = wrapped_result.result
+        error_code = result.error_code.val
+
+        self.get_logger().info(
+            f'Cached trajectory result for {label}: '
+            f'error={error_code}, '
+            f'action_status={wrapped_result.status}, '
+            f'message={result.error_code.message}, '
+            f'source={result.error_code.source}'
+        )
+
+        if error_code != MoveItErrorCodes.SUCCESS:
+            raise RuntimeError(
+                f'Cached trajectory "{label}" failed '
+                f'with error code {error_code}.'
+            )
+
     def execute_sequence(
         self,
         label: str,
         pose_names: List[str],
         poses: Dict[str, List[float]],
+        blended: bool = False,
     ) -> None:
         self.get_logger().info(label)
 
         # The pickup phase remains unchanged because suction must
         # be activated only after reaching pickup_touch.
-        if 'middle' not in pose_names:
+        if not blended:
             for pose_name in pose_names:
                 self.execute_pose(
                     pose_name,
@@ -458,6 +608,28 @@ def parse_arguments() -> argparse.Namespace:
         )
     )
 
+    mode_group = (
+        parser.add_mutually_exclusive_group()
+    )
+
+    mode_group.add_argument(
+        '--commission-cache',
+        action='store_true',
+        help=(
+            'Plan, execute, and save the fixed '
+            'red transfer and return trajectories.'
+        ),
+    )
+
+    mode_group.add_argument(
+        '--use-cache',
+        action='store_true',
+        help=(
+            'Execute the commissioned fixed '
+            'trajectories without replanning them.'
+        ),
+    )
+
     parser.add_argument(
         '--solve-only',
         action='store_true',
@@ -503,6 +675,24 @@ def main() -> int:
         cached = load_cached_plan()
         half_height = red_box_half_height()
 
+        if arguments.commission_cache:
+            RED_TRANSFER_CACHE.unlink(
+                missing_ok=True
+            )
+
+            RED_RETURN_CACHE.unlink(
+                missing_ok=True
+            )
+
+        if arguments.use_cache:
+            load_trajectory(
+                RED_TRANSFER_CACHE
+            )
+
+            load_trajectory(
+                RED_RETURN_CACHE
+            )
+
     except Exception as error:
         print(
             f'ERROR: {error}',
@@ -520,7 +710,17 @@ def main() -> int:
     try:
         node.wait_for_joint_state()
         node.wait_for_moveit()
+
+        if arguments.use_cache:
+            node.wait_for_execute_trajectory()
+
         node.carried_box.wait_for_services()
+
+        restore_occupied_red_boxes(
+            node,
+            node.carried_box,
+            half_height,
+        )
 
         node.get_logger().info(
             'Waiting for the live red-box pose.'
@@ -542,6 +742,18 @@ def main() -> int:
             half_height,
         )
 
+        (
+            red_slot,
+            drop_approach_joints,
+            drop_release_joints,
+            drop_approach,
+            drop_release,
+        ) = solve_dynamic_red_drop(
+            node,
+            cached,
+            half_height,
+        )
+
         poses = dict(
             cached.poses
         )
@@ -554,9 +766,29 @@ def main() -> int:
             pickup_touch_joints
         )
 
+        # Fixed interface between dynamic pickup and the
+        # reusable commissioned transfer trajectory.
+        poses['pickup_exit'] = list(
+            cached.pickup_seed
+        )
+
+        # Fixed interface between the reusable transfer and
+        # the future dynamic placement section.
+        poses['red_bin_staging'] = list(
+            cached.poses['drop_approach']
+        )
+
+        poses['drop_approach'] = (
+            drop_approach_joints
+        )
+
+        poses['drop_release'] = (
+            drop_release_joints
+        )
+
         if arguments.solve_only:
             node.get_logger().info(
-                'MOVEIT PICKUP CHECK PASSED. '
+                'MOVEIT DYNAMIC PICKUP/DROP CHECK PASSED. '
                 'The robot was not moved.'
             )
             return 0
@@ -579,15 +811,77 @@ def main() -> int:
             half_height=half_height
         )
 
-        node.execute_sequence(
-            'PHASE 2: MoveIt transfer to red bin',
-            [
-                'pickup_approach',
-                'drop_approach',
-                'drop_release',
-            ],
-            poses,
+        # Reach the fixed interface pose using a
+        # dynamically planned movement from pickup_touch.
+        node.execute_pose(
+            'pickup_exit',
+            poses['pickup_exit'],
         )
+
+        # Fixed attached-box transfer:
+        # pickup_exit -> red_bin_staging
+        if arguments.commission_cache:
+            node.get_logger().info(
+                'Commissioning fixed attached-box '
+                'red transfer trajectory.'
+            )
+
+            transfer_trajectory = node.execute_pose(
+                'red_bin_staging',
+                poses['red_bin_staging'],
+            )
+
+            save_trajectory(
+                RED_TRANSFER_CACHE,
+                transfer_trajectory,
+                label=(
+                    'red attached transfer: '
+                    'pickup_exit to red_bin_staging'
+                ),
+                metadata={
+                    'start_pose': 'pickup_exit',
+                    'goal_pose': 'red_bin_staging',
+                    'carried_object': 'red_box_carried',
+                },
+            )
+
+            node.get_logger().info(
+                'Saved commissioned red transfer: '
+                f'{RED_TRANSFER_CACHE}'
+            )
+
+        elif arguments.use_cache:
+            node.execute_cached_trajectory(
+                (
+                    'red attached transfer: '
+                    'pickup_exit to red_bin_staging'
+                ),
+                RED_TRANSFER_CACHE,
+            )
+
+        else:
+            node.execute_pose(
+                'red_bin_staging',
+                poses['red_bin_staging'],
+            )
+
+        # Dynamic placement from the fixed staging pose.
+        if red_slot.index == 0:
+            node.execute_pose(
+                'drop_release',
+                poses['drop_release'],
+            )
+
+        else:
+            node.execute_sequence(
+                'PHASE 2: Dynamic red-bin placement',
+                [
+                    'drop_approach',
+                    'drop_release',
+                ],
+                poses,
+                blended=True,
+            )
 
         suction(
             node,
@@ -596,14 +890,92 @@ def main() -> int:
 
         node.carried_box.detach_box()
 
-        node.execute_sequence(
-            'PHASE 3: MoveIt return to pickup area',
-            [
-                'drop_approach',
-                'pickup_approach',
-            ],
-            poses,
+        node.get_logger().info(
+            'Retreating from the released red box.'
         )
+
+        node.execute_pose(
+            'drop_approach',
+            poses['drop_approach'],
+        )
+
+        placed_object_id = (
+            f'red_box_slot_{red_slot.index + 1:02d}'
+        )
+
+        node.carried_box.add_world_box(
+            object_id=placed_object_id,
+            center_xyz=(
+                red_slot.x,
+                red_slot.y,
+                BIN_SURFACE_Z + half_height,
+            ),
+            size_xyz=(
+                0.06,
+                0.06,
+                2.0 * half_height,
+            ),
+            frame_id='world',
+        )
+
+        mark_red_slot_occupied(
+            node,
+            red_slot,
+        )
+
+        # Reach the fixed empty-tool return interface.
+        if red_slot.index != 0:
+            node.execute_pose(
+                'red_bin_staging',
+                poses['red_bin_staging'],
+            )
+
+        # Fixed empty-tool return:
+        # red_bin_staging -> pickup_exit
+        if arguments.commission_cache:
+            node.get_logger().info(
+                'Commissioning fixed empty-tool '
+                'red return trajectory.'
+            )
+
+            return_trajectory = node.execute_pose(
+                'pickup_exit',
+                poses['pickup_exit'],
+            )
+
+            save_trajectory(
+                RED_RETURN_CACHE,
+                return_trajectory,
+                label=(
+                    'red empty return: '
+                    'red_bin_staging to pickup_exit'
+                ),
+                metadata={
+                    'start_pose': 'red_bin_staging',
+                    'goal_pose': 'pickup_exit',
+                    'carried_object': None,
+                },
+            )
+
+            node.get_logger().info(
+                'Saved commissioned red return: '
+                f'{RED_RETURN_CACHE}'
+            )
+
+        elif arguments.use_cache:
+            node.execute_cached_trajectory(
+                (
+                    'red empty return: '
+                    'red_bin_staging to pickup_exit'
+                ),
+                RED_RETURN_CACHE,
+            )
+
+        else:
+            node.execute_pose(
+                'pickup_exit',
+                poses['pickup_exit'],
+            )
 
         node.get_logger().info(
             'RED MOVEIT AUTOMATION COMPLETE.'
@@ -628,6 +1000,19 @@ def main() -> int:
             f'x={pickup_approach[0]:.4f}, '
             f'y={pickup_approach[1]:.4f}, '
             f'z={pickup_approach[2]:.4f}'
+        )
+
+        node.get_logger().info(
+            f'Red-bin slot used: '
+            f'{red_slot.index + 1}/'
+            f'{red_slot.capacity}'
+        )
+
+        node.get_logger().info(
+            'Drop release target: '
+            f'x={drop_release[0]:.4f}, '
+            f'y={drop_release[1]:.4f}, '
+            f'z={drop_release[2]:.4f}'
         )
 
         return 0

@@ -27,6 +27,8 @@ pkill -SIGINT -f '[g]z sim' 2>/dev/null || true
 pkill -SIGINT -f '[g]zserver' 2>/dev/null || true
 pkill -SIGINT -f '[g]zclient' 2>/dev/null || true
 pkill -SIGINT -f '[r]viz2' 2>/dev/null || true
+pkill -SIGINT -f '[m]ove_group' 2>/dev/null || true
+pkill -SIGINT -f '[r]os2 launch ur_moveit_config ur_moveit.launch.py' 2>/dev/null || true
 
 sleep 4
 
@@ -38,10 +40,13 @@ pkill -SIGKILL -f '[p]arameter_bridge' 2>/dev/null || true
 pkill -SIGKILL -f '[g]z sim' 2>/dev/null || true
 pkill -SIGKILL -f '[g]zserver' 2>/dev/null || true
 pkill -SIGKILL -f '[g]zclient' 2>/dev/null || true
+pkill -SIGKILL -f '[m]ove_group' 2>/dev/null || true
+pkill -SIGKILL -f '[r]os2 launch ur_moveit_config ur_moveit.launch.py' 2>/dev/null || true
 
 ros2 daemon stop 2>/dev/null || true
 
 rm -f /tmp/sorting_cell_detected_color.log
+rm -f /tmp/safety_fence_red_bin_slots.json
 
 echo
 echo "========================================"

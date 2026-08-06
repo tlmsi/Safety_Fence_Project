@@ -45,6 +45,20 @@ case "$MODE" in
             --solve-only
         ;;
 
+    commission)
+        echo "Commissioning red MoveIt trajectory cache."
+        exec python3 -u \
+            "$MOVEIT_RUNTIME" \
+            --commission-cache
+        ;;
+
+    cached)
+        echo "Running red automation with commissioned trajectories."
+        exec python3 -u \
+            "$MOVEIT_RUNTIME" \
+            --use-cache
+        ;;
+
     moveit)
         echo "Running V1.1 MoveIt automation."
         exec python3 -u \
@@ -57,7 +71,9 @@ case "$MODE" in
         echo "  $0 check         Validate V1 dynamic pickup IK"
         echo "  $0 run           Run original V1 automation"
         echo "  $0 moveit-check  Validate V1.1 pickup inputs"
-        echo "  $0 moveit        Run V1.1 through MoveIt"
+        echo "  $0 commission    Plan and save fixed MoveIt trajectories"
+        echo "  $0 cached        Use saved fixed MoveIt trajectories"
+        echo "  $0 moveit        Run V1.1 with normal replanning"
         exit 2
         ;;
 esac

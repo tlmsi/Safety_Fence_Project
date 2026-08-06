@@ -267,6 +267,68 @@ class CarriedBoxSceneManager:
             f'{self.attach_link}.'
         )
 
+    def add_world_box(
+        self,
+        object_id: str,
+        center_xyz,
+        size_xyz,
+        frame_id: str = 'world',
+    ) -> None:
+        if len(center_xyz) != 3:
+            raise RuntimeError(
+                'World-box centre must contain three values.'
+            )
+
+        if len(size_xyz) != 3:
+            raise RuntimeError(
+                'World-box size must contain three values.'
+            )
+
+        collision_object = CollisionObject()
+        collision_object.header.frame_id = frame_id
+        collision_object.id = object_id
+        collision_object.operation = (
+            CollisionObject.ADD
+        )
+
+        primitive = SolidPrimitive()
+        primitive.type = SolidPrimitive.BOX
+        primitive.dimensions = [
+            float(value)
+            for value in size_xyz
+        ]
+
+        pose = Pose()
+        pose.position.x = float(center_xyz[0])
+        pose.position.y = float(center_xyz[1])
+        pose.position.z = float(center_xyz[2])
+        pose.orientation.w = 1.0
+
+        collision_object.primitives.append(
+            primitive
+        )
+
+        collision_object.primitive_poses.append(
+            pose
+        )
+
+        scene = PlanningScene()
+        scene.name = 'sorting_cell'
+        scene.is_diff = True
+        scene.world.collision_objects.append(
+            collision_object
+        )
+
+        self.apply_scene(
+            scene,
+            f'add placed object {object_id}',
+        )
+
+        self.node.get_logger().info(
+            f'MoveIt added placed collision object: '
+            f'{object_id}.'
+        )
+
     def detach_box(
         self,
     ) -> None:
