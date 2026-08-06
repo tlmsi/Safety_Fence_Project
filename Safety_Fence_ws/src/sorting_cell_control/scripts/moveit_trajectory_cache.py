@@ -28,6 +28,26 @@ RED_RETURN_CACHE = (
     / 'red_return_empty.json'
 )
 
+GREEN_TRANSFER_CACHE = (
+    CACHE_DIRECTORY
+    / 'green_transfer_attached.json'
+)
+
+GREEN_RETURN_CACHE = (
+    CACHE_DIRECTORY
+    / 'green_return_empty.json'
+)
+
+BLUE_TRANSFER_CACHE = (
+    CACHE_DIRECTORY
+    / 'blue_transfer_attached.json'
+)
+
+BLUE_RETURN_CACHE = (
+    CACHE_DIRECTORY
+    / 'blue_return_empty.json'
+)
+
 
 def trajectory_duration(
     trajectory: RobotTrajectory,

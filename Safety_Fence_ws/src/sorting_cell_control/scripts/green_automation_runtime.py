@@ -16,6 +16,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Bool, String
 
+from gazebo_suction import command_suction
 from move_through_poses import (
     ContinuousPoseExecutor,
     load_pose,
@@ -476,46 +477,12 @@ def suction(
     node: ContinuousPoseExecutor,
     action: str,
 ) -> None:
-    if action not in ('attach', 'detach'):
-        raise RuntimeError(
-            f'Invalid suction action: {action}'
-        )
-
-    node.get_logger().info(
-        f'Suction: {action.upper()}'
+    command_suction(
+        node=node,
+        colour='green',
+        action=action,
+        settle_seconds=SUCTION_SETTLE_SECONDS,
     )
-
-    try:
-        result = subprocess.run(
-            [
-                'gz',
-                'topic',
-                '-t',
-                f'/suction/green/{action}',
-                '-m',
-                'gz.msgs.Empty',
-                '-p',
-                'unused: true',
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=3.0,
-            check=False,
-        )
-
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError(
-            f'Suction command timed out: {action}'
-        ) from error
-
-    if result.returncode != 0:
-        raise RuntimeError(
-            f'Suction {action} failed: '
-            f'{result.stderr.strip()}'
-        )
-
-    time.sleep(SUCTION_SETTLE_SECONDS)
 
 
 def execute_phase(

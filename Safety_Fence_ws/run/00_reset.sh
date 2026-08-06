@@ -47,6 +47,8 @@ ros2 daemon stop 2>/dev/null || true
 
 rm -f /tmp/sorting_cell_detected_color.log
 rm -f /tmp/safety_fence_red_bin_slots.json
+rm -f /tmp/safety_fence_green_bin_slots.json
+rm -f /tmp/safety_fence_blue_bin_slots.json
 
 echo
 echo "========================================"
