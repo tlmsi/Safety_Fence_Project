@@ -13,7 +13,8 @@ WS="$(
 SCRIPTS="$WS/src/sorting_cell_control/scripts"
 
 PLANNER="$SCRIPTS/red_automation.py"
-RUNTIME="$SCRIPTS/red_automation_runtime.py"
+V1_RUNTIME="$SCRIPTS/red_automation_runtime.py"
+MOVEIT_RUNTIME="$SCRIPTS/red_automation_moveit.py"
 
 source "$RUN_DIR/_common.sh"
 
@@ -28,20 +29,35 @@ case "$MODE" in
 
     check)
         exec python3 -u \
-            "$RUNTIME" \
+            "$V1_RUNTIME" \
             --solve-only
         ;;
 
     run)
+        echo "Running original V1 direct-trajectory automation."
         exec python3 -u \
-            "$RUNTIME"
+            "$V1_RUNTIME"
+        ;;
+
+    moveit-check)
+        exec python3 -u \
+            "$MOVEIT_RUNTIME" \
+            --solve-only
+        ;;
+
+    moveit)
+        echo "Running V1.1 MoveIt automation."
+        exec python3 -u \
+            "$MOVEIT_RUNTIME"
         ;;
 
     *)
         echo "Usage:"
-        echo "  $0 plan"
-        echo "  $0 check"
-        echo "  $0 run"
+        echo "  $0 plan          Generate the cached path"
+        echo "  $0 check         Validate V1 dynamic pickup IK"
+        echo "  $0 run           Run original V1 automation"
+        echo "  $0 moveit-check  Validate V1.1 pickup inputs"
+        echo "  $0 moveit        Run V1.1 through MoveIt"
         exit 2
         ;;
 esac

@@ -48,3 +48,7 @@ echo "========================================"
 echo "SAFETY FENCE RESET COMPLETE"
 echo "========================================"
 echo "Terminal windows were not closed."
+
+# Stop ROS-Gazebo bridge processes
+pkill -INT -f '/opt/ros/lyrical/lib/ros_gz_bridge/parameter_bridge' 2>/dev/null || true
+pkill -INT -f '/opt/ros/lyrical/bin/ros2 run ros_gz_bridge parameter_bridge' 2>/dev/null || true
