@@ -24,7 +24,7 @@ echo "========================================"
 echo "TERMINAL 7: UNIFIED SORTING COORDINATOR"
 echo "========================================"
 echo
-echo "Mode: cached MoveIt automation"
+echo "Mode: persistent cached MoveIt executor"
 echo "Colors: RED / GREEN / BLUE"
 echo
 
