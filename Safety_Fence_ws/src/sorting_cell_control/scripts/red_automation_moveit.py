@@ -31,6 +31,8 @@ from red_bin_placement import (
     solve_dynamic_red_drop,
 )
 
+from prepared_pickup import load_prepared_pickup
+
 from moveit_trajectory_cache import (
     RED_RETURN_CACHE,
     RED_TRANSFER_CACHE,
@@ -722,25 +724,95 @@ def main() -> int:
             half_height,
         )
 
-        node.get_logger().info(
-            'Waiting for the live red-box pose.'
+        prepared_pickup = load_prepared_pickup(
+            expected_color='red',
+            max_age_seconds=120.0,
         )
 
-        box_center = wait_for_red_box_pose(
-            node
-        )
+        if prepared_pickup is not None:
+            prepared_age = max(
+                0.0,
+                time.time()
+                - float(
+                    prepared_pickup[
+                        'created_unix_time'
+                    ]
+                ),
+            )
 
-        (
-            pickup_approach_joints,
-            pickup_touch_joints,
-            pickup_approach,
-            pickup_touch,
-        ) = solve_dynamic_pickup(
-            node,
-            cached,
-            box_center,
-            half_height,
-        )
+            prepared_generation = int(
+                prepared_pickup[
+                    'generation'
+                ]
+            )
+
+            box_center = [
+                float(value)
+                for value in prepared_pickup[
+                    'box_center'
+                ]
+            ]
+
+            pickup_approach_joints = [
+                float(value)
+                for value in prepared_pickup[
+                    'pickup_approach_joints'
+                ]
+            ]
+
+            pickup_touch_joints = [
+                float(value)
+                for value in prepared_pickup[
+                    'pickup_touch_joints'
+                ]
+            ]
+
+            pickup_approach = [
+                float(value)
+                for value in prepared_pickup[
+                    'pickup_approach'
+                ]
+            ]
+
+            pickup_touch = [
+                float(value)
+                for value in prepared_pickup[
+                    'pickup_touch'
+                ]
+            ]
+
+            node.get_logger().info(
+                'Using PRECOMPUTED RED pickup IK: '
+                f'generation={prepared_generation}, '
+                f'age={prepared_age:.2f} s.'
+            )
+
+            node.get_logger().info(
+                'Live pickup IK calculation skipped.'
+            )
+
+        else:
+            node.get_logger().warning(
+                'No valid precomputed RED pickup '
+                'IK is available. Falling back to '
+                'live perception and live IK.'
+            )
+
+            box_center = wait_for_red_box_pose(
+                node
+            )
+
+            (
+                pickup_approach_joints,
+                pickup_touch_joints,
+                pickup_approach,
+                pickup_touch,
+            ) = solve_dynamic_pickup(
+                node,
+                cached,
+                box_center,
+                half_height,
+            )
 
         (
             red_slot,
