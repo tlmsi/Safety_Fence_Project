@@ -25,6 +25,10 @@ from std_msgs.msg import Bool, String
 
 import red_automation_moveit as moveit_base
 
+from prepared_bin_trajectory import (
+    PreparedBinTrajectoryPlanner,
+)
+
 from prepared_pickup import (
     PREPARED_PICKUP_APPROACH_TRAJECTORY,
     PREPARED_PICKUP_TOUCH_TRAJECTORY,
@@ -147,6 +151,18 @@ class SortingCoordinator(
         self.drop_ik_executor = ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix='sorting_drop_ik',
+        )
+
+        self.bin_planner_node = Node(
+            'sorting_bin_path_preplanner'
+        )
+
+        self.bin_planner = (
+            PreparedBinTrajectoryPlanner(
+                self.bin_planner_node,
+                velocity=self.velocity,
+                acceleration=self.acceleration,
+            )
         )
 
         self.current_positions: Dict[
@@ -1140,6 +1156,45 @@ class SortingCoordinator(
             half_height=half_height
         )
 
+
+        # Suction and MoveIt attachment are now fully
+        # confirmed. Start future bin planning only after
+        # this reliability-critical handshake has finished.
+
+        self.get_logger().info(
+            f'Starting COMPLETE '
+            f'{color.upper()} bin-side '
+            'trajectory preplanning in background.'
+        )
+
+        bin_plan_future = (
+            self.drop_ik_executor.submit(
+                self.bin_planner.plan_bin_cycle,
+                color=color,
+                slot=slot,
+                half_height=half_height,
+                staging_joints=list(
+                    poses[
+                        staging_name
+                    ]
+                ),
+                drop_approach_joints=list(
+                    drop_approach_joints
+                ),
+                drop_release_joints=list(
+                    drop_release_joints
+                ),
+
+                # Current RED / GREEN / BLUE bin geometry.
+                # All three use the same surface height and
+                # 60 x 60 mm boxes.
+                bin_surface_z=1.02,
+                box_size_x=0.06,
+                box_size_y=0.06,
+            )
+        )
+
+
         attached_exit_trajectory = pickup[
             'attached_exit_trajectory'
         ]
@@ -1214,7 +1269,97 @@ class SortingCoordinator(
         # DYNAMIC DROP
         # ----------------------------------------------------
 
-        if slot.index == 0:
+        bin_plan = None
+
+        bin_plan_wait_started = (
+            time.monotonic()
+        )
+
+        try:
+            bin_plan = (
+                bin_plan_future.result()
+            )
+
+            bin_plan_wait_seconds = (
+                time.monotonic()
+                - bin_plan_wait_started
+            )
+
+            self.get_logger().info(
+                f'BACKGROUND '
+                f'{color.upper()} BIN PATHS READY. '
+                'Wait after cached transfer: '
+                f'{bin_plan_wait_seconds:.3f} s.'
+            )
+
+        except Exception as error:
+            self.get_logger().warning(
+                f'Background '
+                f'{color.upper()} bin-path '
+                f'preplanning failed: {error}'
+            )
+
+            self.get_logger().warning(
+                'Using existing online MoveIt '
+                'bin planning as fallback.'
+            )
+
+        use_prepared_drop = False
+
+        if bin_plan is not None:
+
+            drop_trajectory = (
+                bin_plan[
+                    'drop_trajectory'
+                ]
+            )
+
+            self.wait_for_joint_state()
+
+            drop_start_error = (
+                trajectory_start_error(
+                    drop_trajectory,
+                    self.current_positions,
+                )
+            )
+
+            self.get_logger().info(
+                f'Prepared '
+                f'{color.upper()} dynamic-drop '
+                'start-state error: '
+                f'{drop_start_error:.6f} rad'
+            )
+
+            if drop_start_error <= 0.05:
+                use_prepared_drop = True
+
+            else:
+                self.get_logger().warning(
+                    f'Prepared {color.upper()} '
+                    'dynamic drop does not match '
+                    'the actual bin-staging state. '
+                    'Online fallback will be used.'
+                )
+
+        if use_prepared_drop:
+
+            self.get_logger().info(
+                f'Executing PREPARED '
+                f'{color.upper()} dynamic drop.'
+            )
+
+            self.execute_prepared_trajectory(
+                (
+                    f'{color} prepared dynamic '
+                    'bin placement'
+                ),
+                bin_plan[
+                    'drop_trajectory'
+                ],
+            )
+
+        elif slot.index == 0:
+
             self.execute_pose(
                 'drop_release',
                 poses[
@@ -1223,6 +1368,7 @@ class SortingCoordinator(
             )
 
         else:
+
             self.execute_sequence(
                 (
                     'PHASE 2: Dynamic '
@@ -1250,12 +1396,69 @@ class SortingCoordinator(
             f'{color} box.'
         )
 
-        self.execute_pose(
-            'drop_approach',
-            poses[
-                'drop_approach'
-            ],
-        )
+        use_prepared_retreat = False
+
+        if bin_plan is not None:
+
+            retreat_trajectory = (
+                bin_plan[
+                    'retreat_trajectory'
+                ]
+            )
+
+            self.wait_for_joint_state()
+
+            retreat_start_error = (
+                trajectory_start_error(
+                    retreat_trajectory,
+                    self.current_positions,
+                )
+            )
+
+            self.get_logger().info(
+                f'Prepared '
+                f'{color.upper()} retreat '
+                'start-state error: '
+                f'{retreat_start_error:.6f} rad'
+            )
+
+            if retreat_start_error <= 0.05:
+                use_prepared_retreat = True
+
+            else:
+                self.get_logger().warning(
+                    f'Prepared {color.upper()} retreat '
+                    'does not match the actual '
+                    'drop_release state. '
+                    'Online fallback will be used.'
+                )
+
+        if use_prepared_retreat:
+
+            self.get_logger().info(
+                f'Executing PREPARED '
+                f'{color.upper()} '
+                'post-drop retreat.'
+            )
+
+            self.execute_prepared_trajectory(
+                (
+                    f'{color} prepared empty retreat: '
+                    'drop_release -> drop_approach'
+                ),
+                bin_plan[
+                    'retreat_trajectory'
+                ],
+            )
+
+        else:
+
+            self.execute_pose(
+                'drop_approach',
+                poses[
+                    'drop_approach'
+                ],
+            )
 
         placed_object_id = (
             f'{color}_box_slot_'
@@ -1298,12 +1501,80 @@ class SortingCoordinator(
         # ----------------------------------------------------
 
         if slot.index != 0:
-            self.execute_pose(
-                staging_name,
-                poses[
-                    staging_name
-                ],
-            )
+
+            use_prepared_staging = False
+
+            if (
+                bin_plan is not None
+                and bin_plan[
+                    'staging_trajectory'
+                ] is not None
+            ):
+
+                staging_trajectory = (
+                    bin_plan[
+                        'staging_trajectory'
+                    ]
+                )
+
+                self.wait_for_joint_state()
+
+                staging_start_error = (
+                    trajectory_start_error(
+                        staging_trajectory,
+                        self.current_positions,
+                    )
+                )
+
+                self.get_logger().info(
+                    f'Prepared '
+                    f'{color.upper()} staging '
+                    'start-state error: '
+                    f'{staging_start_error:.6f} rad'
+                )
+
+                if staging_start_error <= 0.05:
+                    use_prepared_staging = True
+
+                else:
+                    self.get_logger().warning(
+                        f'Prepared '
+                        f'{color.upper()} staging '
+                        'trajectory does not match '
+                        'the actual drop_approach '
+                        'state. Online fallback '
+                        'will be used.'
+                    )
+
+            if use_prepared_staging:
+
+                self.get_logger().info(
+                    f'Executing PREPARED '
+                    f'{color.upper()} '
+                    'drop_approach -> '
+                    f'{staging_name}.'
+                )
+
+                self.execute_prepared_trajectory(
+                    (
+                        f'{color} prepared empty '
+                        'return interface: '
+                        'drop_approach -> '
+                        f'{staging_name}'
+                    ),
+                    bin_plan[
+                        'staging_trajectory'
+                    ],
+                )
+
+            else:
+
+                self.execute_pose(
+                    staging_name,
+                    poses[
+                        staging_name
+                    ],
+                )
 
         self.execute_cached_trajectory(
             (
@@ -1342,6 +1613,9 @@ class SortingCoordinator(
             wait=True,
             cancel_futures=True,
         )
+
+        self.bin_planner.shutdown()
+        self.bin_planner_node.destroy_node()
 
 
 def parse_arguments():

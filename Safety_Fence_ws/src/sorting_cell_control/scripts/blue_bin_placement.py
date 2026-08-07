@@ -31,6 +31,14 @@ BOX_GAP = 0.01
 DROP_GAP = 0.001
 DROP_APPROACH_CLEARANCE = 0.15
 
+# Limit the usable bin area to four columns.
+#
+# The physical bin can geometrically fit five columns,
+# but the fifth column at x=0.85 m is outside the
+# reliable IK workspace for the required vertical
+# suction-tip orientation.
+MAX_COLUMNS = 4
+
 
 @dataclass(frozen=True)
 class RedBinSlot:
@@ -75,12 +83,17 @@ def generate_blue_slots() -> List[RedBinSlot]:
         + EDGE_CLEARANCE
     )
 
-    columns = (
+    calculated_columns = (
         math.floor(
             (last_x - first_x) / pitch_x
             + 1e-9
         )
         + 1
+    )
+
+    columns = min(
+        MAX_COLUMNS,
+        calculated_columns,
     )
 
     rows = (
