@@ -3,6 +3,7 @@
 import argparse
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Optional
 
 import rclpy
@@ -137,6 +138,14 @@ class SortingCoordinator(
 
         self.acceleration = float(
             acceleration
+        )
+
+        # One persistent background worker computes the
+        # current cycle's dynamic drop IK while the robot
+        # executes its pickup trajectory.
+        self.drop_ik_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix='sorting_drop_ik',
         )
 
         self.current_positions: Dict[
@@ -863,18 +872,18 @@ class SortingCoordinator(
             )
         )
 
-        (
-            slot,
-            drop_approach_joints,
-            drop_release_joints,
-            drop_approach,
-            drop_release,
-        ) = config[
-            'drop_solver'
-        ](
-            self,
-            cached,
-            half_height,
+        self.get_logger().info(
+            f'Starting {color.upper()} dynamic '
+            'drop IK in parallel with pickup.'
+        )
+
+        drop_future = (
+            self.drop_ik_executor.submit(
+                config['drop_solver'],
+                self,
+                cached,
+                half_height,
+            )
         )
 
         poses = dict(
@@ -911,13 +920,8 @@ class SortingCoordinator(
             ]
         )
 
-        poses[
-            'drop_approach'
-        ] = drop_approach_joints
-
-        poses[
-            'drop_release'
-        ] = drop_release_joints
+        # Dynamic drop poses are being solved in the
+        # background and will be inserted after pickup.
 
         # ----------------------------------------------------
         # PICKUP
@@ -970,6 +974,50 @@ class SortingCoordinator(
                 ],
                 poses,
             )
+
+        # ----------------------------------------------------
+        # COLLECT BACKGROUND DROP IK
+        #
+        # Do this before suction attach. If drop IK failed,
+        # the robot has reached pickup_touch but has not yet
+        # taken possession of the box.
+        # ----------------------------------------------------
+
+        drop_wait_started = time.monotonic()
+
+        try:
+            (
+                slot,
+                drop_approach_joints,
+                drop_release_joints,
+                drop_approach,
+                drop_release,
+            ) = drop_future.result()
+
+        except Exception as error:
+            raise RuntimeError(
+                f'{color.upper()} background '
+                f'drop IK failed: {error}'
+            ) from error
+
+        drop_wait_seconds = (
+            time.monotonic()
+            - drop_wait_started
+        )
+
+        poses[
+            'drop_approach'
+        ] = drop_approach_joints
+
+        poses[
+            'drop_release'
+        ] = drop_release_joints
+
+        self.get_logger().info(
+            f'BACKGROUND {color.upper()} DROP IK READY. '
+            f'Wait at pickup_touch: '
+            f'{drop_wait_seconds:.3f} s.'
+        )
 
         # ----------------------------------------------------
         # ATTACH + PICKUP EXIT
@@ -1128,6 +1176,15 @@ class SortingCoordinator(
             f'x={drop_release[0]:.4f}, '
             f'y={drop_release[1]:.4f}, '
             f'z={drop_release[2]:.4f}'
+        )
+
+
+    def shutdown_background_workers(
+        self,
+    ) -> None:
+        self.drop_ik_executor.shutdown(
+            wait=True,
+            cancel_futures=True,
         )
 
 
@@ -1297,6 +1354,8 @@ def main() -> int:
         return 1
 
     finally:
+        node.shutdown_background_workers()
+
         node.destroy_node()
 
         if rclpy.ok():
