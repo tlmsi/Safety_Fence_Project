@@ -12,6 +12,14 @@ PREPARED_PICKUP_FILE = Path(
     '/tmp/safety_fence_prepared_pickup.json'
 )
 
+PREPARED_PICKUP_APPROACH_TRAJECTORY = Path(
+    '/tmp/safety_fence_prepared_pickup_approach.json'
+)
+
+PREPARED_PICKUP_TOUCH_TRAJECTORY = Path(
+    '/tmp/safety_fence_prepared_pickup_touch.json'
+)
+
 VALID_COLORS = {
     'red',
     'green',
@@ -20,9 +28,14 @@ VALID_COLORS = {
 
 
 def clear_prepared_pickup() -> None:
-    PREPARED_PICKUP_FILE.unlink(
-        missing_ok=True
-    )
+    for path in (
+        PREPARED_PICKUP_FILE,
+        PREPARED_PICKUP_APPROACH_TRAJECTORY,
+        PREPARED_PICKUP_TOUCH_TRAJECTORY,
+    ):
+        path.unlink(
+            missing_ok=True
+        )
 
 
 def save_prepared_pickup(
@@ -35,6 +48,8 @@ def save_prepared_pickup(
     pickup_approach,
     pickup_touch,
     pose_spread,
+    pickup_exit_joints,
+    trajectory_ready: bool,
 ) -> None:
     color = color.strip().lower()
 
@@ -44,38 +59,62 @@ def save_prepared_pickup(
         )
 
     document = {
-        'version': 1,
+        'version': 2,
         'generation': int(generation),
         'color': color,
         'created_unix_time': time.time(),
+
         'box_center': [
             float(value)
             for value in box_center
         ],
+
         'pickup_approach_joints': [
             float(value)
             for value in pickup_approach_joints
         ],
+
         'pickup_touch_joints': [
             float(value)
             for value in pickup_touch_joints
         ],
+
+        'pickup_exit_joints': [
+            float(value)
+            for value in pickup_exit_joints
+        ],
+
         'pickup_approach': [
             float(value)
             for value in pickup_approach
         ],
+
         'pickup_touch': [
             float(value)
             for value in pickup_touch
         ],
+
         'pose_spread': [
             float(value)
             for value in pose_spread
         ],
+
+        'trajectory_ready': bool(
+            trajectory_ready
+        ),
+
+        'pickup_approach_trajectory_file': str(
+            PREPARED_PICKUP_APPROACH_TRAJECTORY
+        ),
+
+        'pickup_touch_trajectory_file': str(
+            PREPARED_PICKUP_TOUCH_TRAJECTORY
+        ),
     }
 
     temporary = PREPARED_PICKUP_FILE.with_name(
-        f'.{PREPARED_PICKUP_FILE.name}.{os.getpid()}.tmp'
+        f'.{PREPARED_PICKUP_FILE.name}.'
+        f'{os.getpid()}.tmp'
     )
 
     temporary.write_text(
@@ -96,6 +135,7 @@ def load_prepared_pickup(
     expected_color: Optional[str] = None,
     max_age_seconds: float = 120.0,
 ) -> Optional[Dict]:
+
     if not PREPARED_PICKUP_FILE.is_file():
         return None
 
@@ -103,10 +143,11 @@ def load_prepared_pickup(
         document = json.loads(
             PREPARED_PICKUP_FILE.read_text()
         )
+
     except Exception:
         return None
 
-    if document.get('version') != 1:
+    if document.get('version') != 2:
         return None
 
     color = str(
@@ -143,12 +184,15 @@ def load_prepared_pickup(
             'box_center': 3,
             'pickup_approach_joints': 6,
             'pickup_touch_joints': 6,
+            'pickup_exit_joints': 6,
             'pickup_approach': 3,
             'pickup_touch': 3,
             'pose_spread': 3,
         }
 
-        for key, expected_length in vector_lengths.items():
+        for key, expected_length in (
+            vector_lengths.items()
+        ):
             values = document[key]
 
             if (
@@ -162,6 +206,22 @@ def load_prepared_pickup(
                     float(value)
                 ):
                     return None
+
+        trajectory_ready = bool(
+            document.get(
+                'trajectory_ready',
+                False,
+            )
+        )
+
+        if trajectory_ready:
+            if not (
+                PREPARED_PICKUP_APPROACH_TRAJECTORY.is_file()
+                and PREPARED_PICKUP_TOUCH_TRAJECTORY.is_file()
+            ):
+                document[
+                    'trajectory_ready'
+                ] = False
 
     except Exception:
         return None

@@ -13,8 +13,18 @@ from std_msgs.msg import Bool, String
 
 from prepared_pickup import (
     PREPARED_PICKUP_FILE,
+    PREPARED_PICKUP_APPROACH_TRAJECTORY,
+    PREPARED_PICKUP_TOUCH_TRAJECTORY,
     clear_prepared_pickup,
     save_prepared_pickup,
+)
+
+from prepared_pickup_trajectory import (
+    PreparedPickupTrajectoryPlanner,
+)
+
+from moveit_trajectory_cache import (
+    save_trajectory,
 )
 
 from red_automation_runtime import (
@@ -59,6 +69,12 @@ class PickupIKPreprocessor(Node):
 
         self.samples: Deque[np.ndarray] = deque(
             maxlen=POSE_SAMPLE_COUNT
+        )
+
+        self.trajectory_planner = (
+            PreparedPickupTrajectoryPlanner(
+                self
+            )
         )
 
         self.configs: Dict[str, Dict] = {
@@ -300,11 +316,58 @@ class PickupIKPreprocessor(Node):
 
             return None
 
+        pickup_exit_joints = list(
+            config['cached'].pickup_seed
+        )
+
+        trajectory_ready = False
+        approach_trajectory = None
+        touch_trajectory = None
+
+        self.get_logger().info(
+            f'Preplanning complete '
+            f'{color.upper()} pickup trajectory '
+            'from fixed pickup_exit.'
+        )
+
+        try:
+            (
+                approach_trajectory,
+                touch_trajectory,
+            ) = self.trajectory_planner.plan_pickup(
+                pickup_exit_joints=(
+                    pickup_exit_joints
+                ),
+                pickup_approach_joints=(
+                    pickup_approach_joints
+                ),
+                pickup_touch_joints=(
+                    pickup_touch_joints
+                ),
+            )
+
+            trajectory_ready = True
+
+        except Exception as error:
+            self.get_logger().warning(
+                f'{color.upper()} pickup trajectory '
+                f'preplanning failed: {error}'
+            )
+
+            self.get_logger().warning(
+                'Keeping prepared IK available; '
+                'the robot runtime can fall back '
+                'to normal MoveIt planning.'
+            )
+
         return {
             'generation': generation,
             'color': color,
             'box_center': box_center,
             'pose_spread': spread,
+            'pickup_exit_joints': (
+                pickup_exit_joints
+            ),
             'pickup_approach_joints': (
                 pickup_approach_joints
             ),
@@ -316,6 +379,15 @@ class PickupIKPreprocessor(Node):
             ),
             'pickup_touch': (
                 pickup_touch
+            ),
+            'trajectory_ready': (
+                trajectory_ready
+            ),
+            'approach_trajectory': (
+                approach_trajectory
+            ),
+            'touch_trajectory': (
+                touch_trajectory
             ),
         }
 
@@ -341,6 +413,41 @@ class PickupIKPreprocessor(Node):
         ):
             return
 
+        if solution['trajectory_ready']:
+            save_trajectory(
+                PREPARED_PICKUP_APPROACH_TRAJECTORY,
+                solution['approach_trajectory'],
+                label=(
+                    f'{solution["color"]} prepared '
+                    'pickup_exit to pickup_approach'
+                ),
+                metadata={
+                    'generation': (
+                        solution['generation']
+                    ),
+                    'color': solution['color'],
+                    'start_pose': 'pickup_exit',
+                    'goal_pose': 'pickup_approach',
+                },
+            )
+
+            save_trajectory(
+                PREPARED_PICKUP_TOUCH_TRAJECTORY,
+                solution['touch_trajectory'],
+                label=(
+                    f'{solution["color"]} prepared '
+                    'pickup_approach to pickup_touch'
+                ),
+                metadata={
+                    'generation': (
+                        solution['generation']
+                    ),
+                    'color': solution['color'],
+                    'start_pose': 'pickup_approach',
+                    'goal_pose': 'pickup_touch',
+                },
+            )
+
         save_prepared_pickup(
             generation=solution['generation'],
             color=solution['color'],
@@ -351,6 +458,9 @@ class PickupIKPreprocessor(Node):
             pickup_touch_joints=(
                 solution['pickup_touch_joints']
             ),
+            pickup_exit_joints=(
+                solution['pickup_exit_joints']
+            ),
             pickup_approach=(
                 solution['pickup_approach']
             ),
@@ -360,12 +470,22 @@ class PickupIKPreprocessor(Node):
             pose_spread=(
                 solution['pose_spread']
             ),
+            trajectory_ready=(
+                solution['trajectory_ready']
+            ),
         )
 
         self.get_logger().info(
             f'PREPARED {solution["color"].upper()} '
             'PICKUP IK IS READY.'
         )
+
+        if solution['trajectory_ready']:
+            self.get_logger().info(
+                f'PREPARED '
+                f'{solution["color"].upper()} '
+                'PICKUP TRAJECTORY IS READY.'
+            )
 
         self.get_logger().info(
             f'Saved generation '
