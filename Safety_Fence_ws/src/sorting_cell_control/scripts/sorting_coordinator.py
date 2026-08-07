@@ -28,6 +28,7 @@ import red_automation_moveit as moveit_base
 from prepared_pickup import (
     PREPARED_PICKUP_APPROACH_TRAJECTORY,
     PREPARED_PICKUP_TOUCH_TRAJECTORY,
+    PREPARED_PICKUP_EXIT_ATTACHED_TRAJECTORY,
     load_prepared_pickup,
 )
 
@@ -601,6 +602,7 @@ class SortingCoordinator(
 
         prepared_approach_trajectory = None
         prepared_touch_trajectory = None
+        prepared_attached_exit_trajectory = None
 
         if prepared is not None:
 
@@ -783,6 +785,107 @@ class SortingCoordinator(
                         f'{error}'
                     )
 
+            if bool(
+                prepared.get(
+                    'attached_exit_trajectory_ready',
+                    False,
+                )
+            ):
+                try:
+                    (
+                        attached_exit_trajectory,
+                        attached_exit_document,
+                    ) = load_trajectory(
+                        PREPARED_PICKUP_EXIT_ATTACHED_TRAJECTORY
+                    )
+
+                    metadata = (
+                        attached_exit_document.get(
+                            'metadata',
+                            {},
+                        )
+                    )
+
+                    file_generation = int(
+                        metadata.get(
+                            'generation',
+                            -1,
+                        )
+                    )
+
+                    file_color = str(
+                        metadata.get(
+                            'color',
+                            '',
+                        )
+                    ).strip().lower()
+
+                    start_pose = str(
+                        metadata.get(
+                            'start_pose',
+                            '',
+                        )
+                    )
+
+                    goal_pose = str(
+                        metadata.get(
+                            'goal_pose',
+                            '',
+                        )
+                    )
+
+                    carried_object = str(
+                        metadata.get(
+                            'carried_object',
+                            '',
+                        )
+                    )
+
+                    expected_carried_object = (
+                        f'{color}_box_carried'
+                    )
+
+                    if (
+                        file_generation
+                        != generation
+                        or file_color
+                        != color
+                        or start_pose
+                        != 'pickup_touch'
+                        or goal_pose
+                        != 'pickup_exit'
+                        or carried_object
+                        != expected_carried_object
+                    ):
+                        raise RuntimeError(
+                            'Prepared attached pickup-exit '
+                            'trajectory metadata does not '
+                            'match this pickup event.'
+                        )
+
+                    prepared_attached_exit_trajectory = (
+                        attached_exit_trajectory
+                    )
+
+                    self.get_logger().info(
+                        f'PREPARED '
+                        f'{color.upper()} ATTACHED '
+                        'PICKUP-EXIT TRAJECTORY LOADED.'
+                    )
+
+                except Exception as error:
+                    self.get_logger().warning(
+                        f'Prepared '
+                        f'{color.upper()} attached '
+                        'pickup-exit trajectory '
+                        f'cannot be used: {error}'
+                    )
+
+                    self.get_logger().warning(
+                        'Normal MoveIt pickup_exit '
+                        'planning will be used.'
+                    )
+
         else:
             self.get_logger().warning(
                 f'No valid precomputed '
@@ -832,6 +935,9 @@ class SortingCoordinator(
             ),
             'touch_trajectory': (
                 prepared_touch_trajectory
+            ),
+            'attached_exit_trajectory': (
+                prepared_attached_exit_trajectory
             ),
         }
 
@@ -1034,10 +1140,60 @@ class SortingCoordinator(
             half_height=half_height
         )
 
-        self.execute_pose(
-            'pickup_exit',
-            poses['pickup_exit'],
-        )
+        attached_exit_trajectory = pickup[
+            'attached_exit_trajectory'
+        ]
+
+        use_prepared_attached_exit = False
+
+        if attached_exit_trajectory is not None:
+            self.wait_for_joint_state()
+
+            attached_exit_start_error = (
+                trajectory_start_error(
+                    attached_exit_trajectory,
+                    self.current_positions,
+                )
+            )
+
+            self.get_logger().info(
+                f'Prepared {color.upper()} attached '
+                'pickup-exit start-state error: '
+                f'{attached_exit_start_error:.6f} rad'
+            )
+
+            if attached_exit_start_error <= 0.05:
+                use_prepared_attached_exit = True
+
+            else:
+                self.get_logger().warning(
+                    f'Prepared {color.upper()} attached '
+                    'pickup-exit trajectory does not '
+                    'match the current pickup_touch '
+                    'state. Normal MoveIt pickup_exit '
+                    'planning will be used.'
+                )
+
+        if use_prepared_attached_exit:
+            self.get_logger().info(
+                f'Executing PREPARED '
+                f'{color.upper()} attached '
+                'pickup_touch -> pickup_exit.'
+            )
+
+            self.execute_prepared_trajectory(
+                (
+                    f'{color} prepared attached pickup: '
+                    'pickup_touch -> pickup_exit'
+                ),
+                attached_exit_trajectory,
+            )
+
+        else:
+            self.execute_pose(
+                'pickup_exit',
+                poses['pickup_exit'],
+            )
 
         # ----------------------------------------------------
         # FIXED ATTACHED TRANSFER
