@@ -20,6 +20,10 @@ PREPARED_PICKUP_TOUCH_TRAJECTORY = Path(
     '/tmp/safety_fence_prepared_pickup_touch.json'
 )
 
+PREPARED_PICKUP_EXIT_ATTACHED_TRAJECTORY = Path(
+    '/tmp/safety_fence_prepared_pickup_touch_to_exit_attached.json'
+)
+
 VALID_COLORS = {
     'red',
     'green',
@@ -32,6 +36,7 @@ def clear_prepared_pickup() -> None:
         PREPARED_PICKUP_FILE,
         PREPARED_PICKUP_APPROACH_TRAJECTORY,
         PREPARED_PICKUP_TOUCH_TRAJECTORY,
+        PREPARED_PICKUP_EXIT_ATTACHED_TRAJECTORY,
     ):
         path.unlink(
             missing_ok=True
@@ -50,6 +55,7 @@ def save_prepared_pickup(
     pose_spread,
     pickup_exit_joints,
     trajectory_ready: bool,
+    attached_exit_trajectory_ready: bool,
 ) -> None:
     color = color.strip().lower()
 
@@ -59,7 +65,7 @@ def save_prepared_pickup(
         )
 
     document = {
-        'version': 2,
+        'version': 3,
         'generation': int(generation),
         'color': color,
         'created_unix_time': time.time(),
@@ -110,6 +116,14 @@ def save_prepared_pickup(
         'pickup_touch_trajectory_file': str(
             PREPARED_PICKUP_TOUCH_TRAJECTORY
         ),
+
+        'attached_exit_trajectory_ready': bool(
+            attached_exit_trajectory_ready
+        ),
+
+        'pickup_exit_attached_trajectory_file': str(
+            PREPARED_PICKUP_EXIT_ATTACHED_TRAJECTORY
+        ),
     }
 
     temporary = PREPARED_PICKUP_FILE.with_name(
@@ -147,7 +161,11 @@ def load_prepared_pickup(
     except Exception:
         return None
 
-    if document.get('version') != 2:
+    version = int(
+        document.get('version', 0)
+    )
+
+    if version not in (2, 3):
         return None
 
     color = str(
@@ -221,6 +239,21 @@ def load_prepared_pickup(
             ):
                 document[
                     'trajectory_ready'
+                ] = False
+
+        attached_exit_ready = bool(
+            document.get(
+                'attached_exit_trajectory_ready',
+                False,
+            )
+        )
+
+        if attached_exit_ready:
+            if not (
+                PREPARED_PICKUP_EXIT_ATTACHED_TRAJECTORY.is_file()
+            ):
+                document[
+                    'attached_exit_trajectory_ready'
                 ] = False
 
     except Exception:

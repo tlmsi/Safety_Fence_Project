@@ -15,6 +15,7 @@ from prepared_pickup import (
     PREPARED_PICKUP_FILE,
     PREPARED_PICKUP_APPROACH_TRAJECTORY,
     PREPARED_PICKUP_TOUCH_TRAJECTORY,
+    PREPARED_PICKUP_EXIT_ATTACHED_TRAJECTORY,
     clear_prepared_pickup,
     save_prepared_pickup,
 )
@@ -324,6 +325,9 @@ class PickupIKPreprocessor(Node):
         approach_trajectory = None
         touch_trajectory = None
 
+        attached_exit_trajectory_ready = False
+        attached_exit_trajectory = None
+
         self.get_logger().info(
             f'Preplanning complete '
             f'{color.upper()} pickup trajectory '
@@ -360,6 +364,40 @@ class PickupIKPreprocessor(Node):
                 'to normal MoveIt planning.'
             )
 
+        self.get_logger().info(
+            f'Preplanning {color.upper()} '
+            'ATTACHED pickup_touch -> pickup_exit '
+            'trajectory.'
+        )
+
+        try:
+            attached_exit_trajectory = (
+                self.trajectory_planner.plan_attached_exit(
+                    color=color,
+                    half_height=config['half_height'],
+                    pickup_touch_joints=(
+                        pickup_touch_joints
+                    ),
+                    pickup_exit_joints=(
+                        pickup_exit_joints
+                    ),
+                )
+            )
+
+            attached_exit_trajectory_ready = True
+
+        except Exception as error:
+            self.get_logger().warning(
+                f'{color.upper()} attached '
+                'pickup-exit trajectory '
+                f'preplanning failed: {error}'
+            )
+
+            self.get_logger().warning(
+                'Existing prepared pickup '
+                'trajectories remain available.'
+            )
+
         return {
             'generation': generation,
             'color': color,
@@ -388,6 +426,12 @@ class PickupIKPreprocessor(Node):
             ),
             'touch_trajectory': (
                 touch_trajectory
+            ),
+            'attached_exit_trajectory_ready': (
+                attached_exit_trajectory_ready
+            ),
+            'attached_exit_trajectory': (
+                attached_exit_trajectory
             ),
         }
 
@@ -448,6 +492,32 @@ class PickupIKPreprocessor(Node):
                 },
             )
 
+        if solution[
+            'attached_exit_trajectory_ready'
+        ]:
+            save_trajectory(
+                PREPARED_PICKUP_EXIT_ATTACHED_TRAJECTORY,
+                solution[
+                    'attached_exit_trajectory'
+                ],
+                label=(
+                    f'{solution["color"]} prepared '
+                    'pickup_touch to pickup_exit '
+                    'with carried box'
+                ),
+                metadata={
+                    'generation': (
+                        solution['generation']
+                    ),
+                    'color': solution['color'],
+                    'start_pose': 'pickup_touch',
+                    'goal_pose': 'pickup_exit',
+                    'carried_object': (
+                        f'{solution["color"]}_box_carried'
+                    ),
+                },
+            )
+
         save_prepared_pickup(
             generation=solution['generation'],
             color=solution['color'],
@@ -473,6 +543,11 @@ class PickupIKPreprocessor(Node):
             trajectory_ready=(
                 solution['trajectory_ready']
             ),
+            attached_exit_trajectory_ready=(
+                solution[
+                    'attached_exit_trajectory_ready'
+                ]
+            ),
         )
 
         self.get_logger().info(
@@ -485,6 +560,16 @@ class PickupIKPreprocessor(Node):
                 f'PREPARED '
                 f'{solution["color"].upper()} '
                 'PICKUP TRAJECTORY IS READY.'
+            )
+
+        if solution[
+            'attached_exit_trajectory_ready'
+        ]:
+            self.get_logger().info(
+                f'PREPARED '
+                f'{solution["color"].upper()} '
+                'ATTACHED PICKUP-EXIT '
+                'TRAJECTORY IS READY.'
             )
 
         self.get_logger().info(

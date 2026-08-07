@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import rclpy
 
+from geometry_msgs.msg import Pose
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     AttachedCollisionObject,
@@ -14,6 +15,7 @@ from moveit_msgs.msg import (
     RobotTrajectory,
 )
 from rclpy.action import ActionClient
+from shape_msgs.msg import SolidPrimitive
 
 from moveit_trajectory_cache import (
     trajectory_duration,
@@ -36,6 +38,17 @@ CARRIED_OBJECT_IDS = (
     'green_box_carried',
     'blue_box_carried',
 )
+
+ATTACH_LINK = 'suction_tip'
+
+TOUCH_LINKS = [
+    'suction_tip',
+    'suction_cup_link',
+    'suction_tool_link',
+]
+
+BOX_WIDTH = 0.06
+CONTACT_CLEARANCE = 0.002
 
 
 class PreparedPickupTrajectoryPlanner:
@@ -68,12 +81,88 @@ class PreparedPickupTrajectoryPlanner:
                 'for pickup trajectory preplanning.'
             )
 
+    def create_carried_box(
+        self,
+        *,
+        color: str,
+        half_height: float,
+    ) -> AttachedCollisionObject:
+
+        color = color.strip().lower()
+
+        object_id = (
+            f'{color}_box_carried'
+        )
+
+        if object_id not in CARRIED_OBJECT_IDS:
+            raise RuntimeError(
+                f'Unsupported carried-box color: {color}'
+            )
+
+        full_height = float(
+            2.0 * half_height
+        )
+
+        collision_height = max(
+            0.001,
+            full_height - CONTACT_CLEARANCE,
+        )
+
+        attached = AttachedCollisionObject()
+
+        attached.link_name = ATTACH_LINK
+
+        attached.touch_links = list(
+            TOUCH_LINKS
+        )
+
+        attached.object.header.frame_id = (
+            ATTACH_LINK
+        )
+
+        attached.object.id = object_id
+
+        attached.object.operation = (
+            CollisionObject.ADD
+        )
+
+        primitive = SolidPrimitive()
+        primitive.type = SolidPrimitive.BOX
+
+        primitive.dimensions = [
+            BOX_WIDTH,
+            BOX_WIDTH,
+            collision_height,
+        ]
+
+        pose = Pose()
+
+        # Exact same representation used by the real
+        # MoveIt carried-box scene managers.
+        pose.position.z = (
+            collision_height / 2.0
+        )
+
+        pose.orientation.w = 1.0
+
+        attached.object.primitives.append(
+            primitive
+        )
+
+        attached.object.primitive_poses.append(
+            pose
+        )
+
+        return attached
+
     def create_plan_only_goal(
         self,
         *,
         label: str,
         start_positions: List[float],
         goal_positions: List[float],
+        attached_color: Optional[str] = None,
+        attached_half_height: Optional[float] = None,
     ) -> MoveGroup.Goal:
 
         if len(start_positions) != 6:
@@ -139,6 +228,30 @@ class PreparedPickupTrajectoryPlanner:
 
         request.start_state.is_diff = False
 
+        carried_object_id = None
+
+        if attached_color is not None:
+            if attached_half_height is None:
+                raise RuntimeError(
+                    f'{label}: attached box height '
+                    'was not provided.'
+                )
+
+            carried_object = self.create_carried_box(
+                color=attached_color,
+                half_height=attached_half_height,
+            )
+
+            carried_object_id = (
+                carried_object.object.id
+            )
+
+            # The explicit start state must also know that
+            # the box is already attached at pickup_touch.
+            request.start_state.attached_collision_objects.append(
+                carried_object
+            )
+
         request.goal_constraints.append(
             constraints
         )
@@ -159,27 +272,47 @@ class PreparedPickupTrajectoryPlanner:
         scene.robot_state.is_diff = True
 
         for object_id in CARRIED_OBJECT_IDS:
-            attached_remove = (
-                AttachedCollisionObject()
-            )
 
-            attached_remove.object.id = object_id
-            attached_remove.object.operation = (
-                CollisionObject.REMOVE
-            )
+            # Remove any OTHER box that may currently be
+            # carried by the robot while Terminal 8 plans
+            # the next cycle.
+            if object_id != carried_object_id:
+                attached_remove = (
+                    AttachedCollisionObject()
+                )
 
-            scene.robot_state.attached_collision_objects.append(
-                attached_remove
-            )
+                attached_remove.object.id = (
+                    object_id
+                )
 
+                attached_remove.object.operation = (
+                    CollisionObject.REMOVE
+                )
+
+                scene.robot_state.attached_collision_objects.append(
+                    attached_remove
+                )
+
+            # No carried-box representation should remain
+            # in the world collision-object list.
             world_remove = CollisionObject()
+
             world_remove.id = object_id
+
             world_remove.operation = (
                 CollisionObject.REMOVE
             )
 
             scene.world.collision_objects.append(
                 world_remove
+            )
+
+        if attached_color is not None:
+            scene.robot_state.attached_collision_objects.append(
+                self.create_carried_box(
+                    color=attached_color,
+                    half_height=attached_half_height,
+                )
             )
 
         # PLAN ONLY. Absolutely no robot movement from T8.
@@ -195,6 +328,8 @@ class PreparedPickupTrajectoryPlanner:
         label: str,
         start_positions: List[float],
         goal_positions: List[float],
+        attached_color: Optional[str] = None,
+        attached_half_height: Optional[float] = None,
     ) -> RobotTrajectory:
 
         self.wait_for_moveit()
@@ -209,6 +344,8 @@ class PreparedPickupTrajectoryPlanner:
                     label=label,
                     start_positions=start_positions,
                     goal_positions=goal_positions,
+                    attached_color=attached_color,
+                    attached_half_height=attached_half_height,
                 )
             )
         )
@@ -317,4 +454,24 @@ class PreparedPickupTrajectoryPlanner:
         return (
             approach_trajectory,
             touch_trajectory,
+        )
+
+    def plan_attached_exit(
+        self,
+        *,
+        color: str,
+        half_height: float,
+        pickup_touch_joints: List[float],
+        pickup_exit_joints: List[float],
+    ) -> RobotTrajectory:
+
+        return self.plan_segment(
+            label=(
+                'pickup_touch -> pickup_exit '
+                f'({color.upper()} box attached)'
+            ),
+            start_positions=pickup_touch_joints,
+            goal_positions=pickup_exit_joints,
+            attached_color=color,
+            attached_half_height=half_height,
         )
