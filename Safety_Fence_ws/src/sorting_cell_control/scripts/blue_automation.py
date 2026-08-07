@@ -397,6 +397,7 @@ def solve_fixed(
     start,
     xyz,
     yaw,
+    position_limit=0.001,
 ):
     target_rotation = (
         ik.downward_orientation(
@@ -589,16 +590,20 @@ def solve_fixed(
         orientation_error,
     ) = best
 
-    # The drop gap is only 1 mm, so use a much
-    # stricter accuracy limit than the earlier tests.
+    if position_limit <= 0.0:
+        raise RuntimeError(
+            'IK position limit must be positive.'
+        )
+
     if (
-        position_error > 0.001
+        position_error > position_limit
         or orientation_error
         > math.radians(3.0)
     ):
         raise RuntimeError(
             'IK validation failed '
-            '(position limit 1 mm): '
+            f'(position limit '
+            f'{position_limit * 1000.0:.2f} mm): '
             f'target='
             f'({xyz[0]:.4f}, '
             f'{xyz[1]:.4f}, '

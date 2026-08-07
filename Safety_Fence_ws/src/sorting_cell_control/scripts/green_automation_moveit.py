@@ -31,7 +31,11 @@ from green_bin_placement import (
     solve_dynamic_green_drop,
 )
 
-from prepared_pickup import load_prepared_pickup
+from prepared_pickup import (
+    PREPARED_PICKUP_APPROACH_TRAJECTORY,
+    PREPARED_PICKUP_TOUCH_TRAJECTORY,
+    load_prepared_pickup,
+)
 
 from moveit_trajectory_cache import (
     GREEN_RETURN_CACHE,
@@ -729,6 +733,8 @@ def main() -> int:
             max_age_seconds=120.0,
         )
 
+        use_prepared_pickup_trajectory = False
+
         if prepared_pickup is not None:
             prepared_age = max(
                 0.0,
@@ -790,6 +796,119 @@ def main() -> int:
             node.get_logger().info(
                 'Live pickup IK calculation skipped.'
             )
+
+            if (
+                arguments.use_cache
+                and bool(
+                    prepared_pickup.get(
+                        'trajectory_ready',
+                        False,
+                    )
+                )
+            ):
+                try:
+                    (
+                        prepared_approach_trajectory,
+                        prepared_approach_document,
+                    ) = load_trajectory(
+                        PREPARED_PICKUP_APPROACH_TRAJECTORY
+                    )
+
+                    (
+                        prepared_touch_trajectory,
+                        prepared_touch_document,
+                    ) = load_trajectory(
+                        PREPARED_PICKUP_TOUCH_TRAJECTORY
+                    )
+
+                    for (
+                        trajectory_label,
+                        trajectory_document,
+                    ) in (
+                        (
+                            'approach',
+                            prepared_approach_document,
+                        ),
+                        (
+                            'touch',
+                            prepared_touch_document,
+                        ),
+                    ):
+                        metadata = (
+                            trajectory_document.get(
+                                'metadata',
+                                {},
+                            )
+                        )
+
+                        trajectory_generation = int(
+                            metadata.get(
+                                'generation',
+                                -1,
+                            )
+                        )
+
+                        trajectory_color = str(
+                            metadata.get(
+                                'color',
+                                '',
+                            )
+                        ).strip().lower()
+
+                        if (
+                            trajectory_generation
+                            != prepared_generation
+                            or trajectory_color
+                            != 'green'
+                        ):
+                            raise RuntimeError(
+                                f'Prepared '
+                                f'{trajectory_label} '
+                                'trajectory belongs to '
+                                'a different pickup event.'
+                            )
+
+                    prepared_start_error = (
+                        trajectory_start_error(
+                            prepared_approach_trajectory,
+                            node.current_positions,
+                        )
+                    )
+
+                    node.get_logger().info(
+                        'Prepared GREEN pickup '
+                        'trajectory start-state error: '
+                        f'{prepared_start_error:.6f} rad'
+                    )
+
+                    if prepared_start_error <= 0.05:
+                        use_prepared_pickup_trajectory = True
+
+                        node.get_logger().info(
+                            'PREPARED GREEN PICKUP '
+                            'TRAJECTORY ACCEPTED.'
+                        )
+
+                    else:
+                        node.get_logger().warning(
+                            'Prepared GREEN pickup '
+                            'trajectory start state does '
+                            'not match the current robot. '
+                            'Falling back to normal '
+                            'MoveIt pickup planning.'
+                        )
+
+                except Exception as error:
+                    node.get_logger().warning(
+                        'Prepared GREEN pickup '
+                        'trajectory cannot be used: '
+                        f'{error}'
+                    )
+
+                    node.get_logger().warning(
+                        'Falling back to normal '
+                        'MoveIt pickup planning.'
+                    )
 
         else:
             node.get_logger().warning(
@@ -865,14 +984,37 @@ def main() -> int:
             )
             return 0
 
-        node.execute_sequence(
-            'PHASE 1: MoveIt pickup approach and touch',
-            [
-                'pickup_approach',
-                'pickup_touch',
-            ],
-            poses,
-        )
+        if use_prepared_pickup_trajectory:
+            node.get_logger().info(
+                'PHASE 1: Executing PREPARED '
+                'GREEN pickup trajectory'
+            )
+
+            node.execute_cached_trajectory(
+                (
+                    'green prepared pickup: '
+                    'pickup_exit to pickup_approach'
+                ),
+                PREPARED_PICKUP_APPROACH_TRAJECTORY,
+            )
+
+            node.execute_cached_trajectory(
+                (
+                    'green prepared pickup: '
+                    'pickup_approach to pickup_touch'
+                ),
+                PREPARED_PICKUP_TOUCH_TRAJECTORY,
+            )
+
+        else:
+            node.execute_sequence(
+                'PHASE 1: MoveIt pickup approach and touch',
+                [
+                    'pickup_approach',
+                    'pickup_touch',
+                ],
+                poses,
+            )
 
         suction(
             node,

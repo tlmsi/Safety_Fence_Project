@@ -334,6 +334,11 @@ def solve_dynamic_blue_drop(
         'Solving IK for dynamic drop approach...'
     )
 
+    node.get_logger().info(
+        'Drop approach IK position tolerance: '
+        '2.00 mm. Release remains strict at 1.00 mm.'
+    )
+
     (
         approach_joints,
         approach_position_error,
@@ -346,6 +351,7 @@ def solve_dynamic_blue_drop(
         staging_seed,
         drop_approach,
         cached.tool_yaw,
+        position_limit=0.002,
     )
 
     node.get_logger().info(
