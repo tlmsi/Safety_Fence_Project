@@ -27,17 +27,17 @@
       0.97
     ],
     "middle_xyz": [
-      0.36487627296786174,
-      0.5815738880962942,
+      0.35926154383502584,
+      0.5836176884500517,
       1.261
     ],
     "drop_approach_xyz": [
-      0.57,
+      0.53,
       0.08,
       1.2309999999999999
     ],
     "drop_release_tip_xyz": [
-      0.57,
+      0.53,
       0.08,
       1.081
     ],
@@ -60,16 +60,16 @@
       "orientation_error_rad": 5.740871769164383e-06
     },
     "middle": {
-      "position_error_m": 2.3642395211187966e-06,
-      "orientation_error_rad": 2.2663039489002064e-05
+      "position_error_m": 2.3460688795860335e-06,
+      "orientation_error_rad": 2.2511262118661705e-05
     },
     "drop_approach": {
-      "position_error_m": 2.6945509632905692e-06,
-      "orientation_error_rad": 2.5007105133894818e-05
+      "position_error_m": 2.8442364251977124e-06,
+      "orientation_error_rad": 2.640436610250201e-05
     },
     "drop_release": {
-      "position_error_m": 4.1432498337558345e-07,
-      "orientation_error_rad": 6.502563465649176e-06
+      "position_error_m": 4.2622452066803344e-07,
+      "orientation_error_rad": 6.46488650123891e-06
     }
   }
 }

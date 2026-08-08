@@ -4,7 +4,7 @@
     <static>true</static>
     <link name="red_bin_link">
       <collision name="red_bottom_collision">
-        <pose>0 -0.48 0.02 0 0 0</pose>
+        <pose>0 -0.41 0.02 0 0 0</pose>
         <geometry>
           <box>
             <size>0.38 0.34 0.04</size>
@@ -12,7 +12,7 @@
         </geometry>
       </collision>
       <visual name="red_bottom_visual">
-        <pose>0 -0.48 0.02 0 0 0</pose>
+        <pose>0 -0.41 0.02 0 0 0</pose>
         <geometry>
           <box>
             <size>0.38 0.34 0.04</size>
@@ -48,7 +48,7 @@
     </link>
     <link name="blue_bin_link">
       <collision name="blue_bottom_collision">
-        <pose>0 0.48 0.02 0 0 0</pose>
+        <pose>0 0.41 0.02 0 0 0</pose>
         <geometry>
           <box>
             <size>0.38 0.34 0.04</size>
@@ -56,7 +56,7 @@
         </geometry>
       </collision>
       <visual name="blue_bottom_visual">
-        <pose>0 0.48 0.02 0 0 0</pose>
+        <pose>0 0.41 0.02 0 0 0</pose>
         <geometry>
           <box>
             <size>0.38 0.34 0.04</size>

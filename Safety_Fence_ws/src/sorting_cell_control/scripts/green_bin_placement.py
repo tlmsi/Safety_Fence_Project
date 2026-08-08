@@ -17,7 +17,7 @@ STATE_FILE = Path(
 
 # Green-bin geometry from sorting_bins/model.sdf and
 # load_sorting_scene.py.
-BIN_CENTER_X = 0.72
+BIN_CENTER_X = 0.68
 BIN_CENTER_Y = -0.05
 BIN_SIZE_X = 0.38
 BIN_SIZE_Y = 0.34

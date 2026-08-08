@@ -27,18 +27,18 @@
       0.97
     ],
     "middle_xyz": [
-      0.14003270243902938,
-      0.6380627449228373,
+      0.14531526270734235,
+      0.6199823007445445,
       1.261
     ],
     "drop_approach_xyz": [
-      0.57,
-      0.5599999999999999,
+      0.53,
+      0.49000000000000005,
       1.2309999999999999
     ],
     "drop_release_tip_xyz": [
-      0.57,
-      0.5599999999999999,
+      0.53,
+      0.49000000000000005,
       1.081
     ],
     "blue_bin_surface_z": 1.02,
@@ -60,16 +60,16 @@
       "orientation_error_rad": 5.740871769164383e-06
     },
     "middle": {
-      "position_error_m": 1.7733849578557148e-06,
-      "orientation_error_rad": 1.8457054662478672e-05
+      "position_error_m": 1.700066914964804e-06,
+      "orientation_error_rad": 1.7244624817381214e-05
     },
     "drop_approach": {
-      "position_error_m": 1.3279528879095587e-06,
-      "orientation_error_rad": 1.211500606358656e-05
+      "position_error_m": 1.3220640881285766e-06,
+      "orientation_error_rad": 1.1933272680065225e-05
     },
     "drop_release": {
-      "position_error_m": 5.490152257921328e-07,
-      "orientation_error_rad": 8.165226546825239e-06
+      "position_error_m": 4.391421429057513e-07,
+      "orientation_error_rad": 6.990624005375572e-06
     }
   }
 }

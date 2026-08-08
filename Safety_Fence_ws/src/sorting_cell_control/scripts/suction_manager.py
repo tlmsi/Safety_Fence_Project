@@ -288,6 +288,8 @@ class SuctionManager(Node):
             '========================================'
         )
 
+        self.prewarm_initial_monitors()
+
         self.get_logger().info(
             'FAST T10 SUCTION MANAGER READY'
         )
@@ -363,6 +365,11 @@ class SuctionManager(Node):
             if action == 'attach':
 
                 self.attach(
+                    color,
+                    index,
+                )
+
+                self.prewarm_next_monitor_async(
                     color,
                     index,
                 )
@@ -568,6 +575,103 @@ class SuctionManager(Node):
     # ========================================================
     # PERSISTENT GAZEBO STATE
     # ========================================================
+
+    def prewarm_initial_monitors(
+        self,
+    ):
+
+        self.get_logger().info(
+            'Prewarming initial Gazebo suction '
+            'state listeners.'
+        )
+
+        for color in VALID_COLORS:
+
+            monitor = self.get_monitor(
+                color,
+                1,
+            )
+
+            if monitor.process.poll() is not None:
+
+                raise RuntimeError(
+                    'Initial Gazebo state listener '
+                    f'failed to stay alive for [{color}]'
+                )
+
+        self.get_logger().info(
+            'Initial RED / GREEN / BLUE suction '
+            'state listeners are ready.'
+        )
+
+    def prewarm_next_monitor_async(
+        self,
+        color,
+        index,
+    ):
+
+        next_index = (
+            int(index)
+            + 1
+        )
+
+        if next_index > MAX_BOX_INDEX:
+            return
+
+        key = (
+            color,
+            next_index,
+        )
+
+        existing = self.monitors.get(
+            key
+        )
+
+        if (
+            existing is not None
+            and existing.process.poll() is None
+        ):
+            return
+
+        channel = channel_name(
+            color,
+            next_index,
+        )
+
+        def worker():
+
+            try:
+
+                monitor = self.get_monitor(
+                    color,
+                    next_index,
+                )
+
+                if monitor.process.poll() is not None:
+
+                    raise RuntimeError(
+                        'Gazebo listener exited '
+                        'during prewarm.'
+                    )
+
+                self.get_logger().info(
+                    'Prewarmed next suction '
+                    'state listener: '
+                    f'[{channel}]'
+                )
+
+            except Exception as error:
+
+                self.get_logger().warning(
+                    'Could not prewarm next suction '
+                    f'listener [{channel}]: '
+                    f'{error}'
+                )
+
+        threading.Thread(
+            target=worker,
+            daemon=True,
+        ).start()
 
     def get_monitor(
         self,
@@ -1079,19 +1183,73 @@ class SuctionManager(Node):
             time.monotonic()
         )
 
+        # First DETACH command.
         self.publish_empty(
             topic
         )
 
-        if not monitor.wait_after(
+        # In the normal case Gazebo reports DETACHED almost
+        # immediately after the gz command process returns.
+        #
+        # Do not spend the full STATE_TIMEOUT before retrying:
+        # a transient Gazebo Transport command-delivery miss
+        # should be recovered quickly.
+        detached = monitor.wait_after(
             sequence,
             'detached',
-            STATE_TIMEOUT,
-        ):
+            0.35,
+        )
+
+        if not detached:
+
+            retry_sequence, retry_state = (
+                monitor.snapshot()
+            )
+
+            # Guard against a state transition arriving exactly
+            # around the short first wait boundary.
+            if (
+                retry_sequence > sequence
+                and retry_state == 'detached'
+            ):
+
+                detached = True
+
+            else:
+
+                self.get_logger().warning(
+                    'DETACH acknowledgement was not '
+                    f'seen after the first command '
+                    f'[{channel}]. Retrying once.'
+                )
+
+                # A second DETACH request is safe here. If the
+                # first command was simply missed, this gives
+                # Gazebo another delivery opportunity. If its
+                # acknowledgement was merely delayed, the
+                # persistent listener can still observe that
+                # transition while this command is running.
+                self.publish_empty(
+                    topic
+                )
+
+                detached = monitor.wait_after(
+                    retry_sequence,
+                    'detached',
+                    STATE_TIMEOUT,
+                )
+
+        if not detached:
+
+            final_sequence, final_state = (
+                monitor.snapshot()
+            )
 
             raise RuntimeError(
                 'Gazebo did not confirm '
-                f'DETACH [{channel}]'
+                f'DETACH [{channel}] after one retry. '
+                f'Last monitor state={final_state}, '
+                f'sequence={final_sequence}'
             )
 
         elapsed = (

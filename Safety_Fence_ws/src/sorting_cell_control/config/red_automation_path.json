@@ -5,12 +5,14 @@
     "pickup_approach",
     "pickup_touch",
     "attach_red",
-    "pickup_exit",
-    "red_bin_staging",
+    "pickup_approach",
+    "middle",
+    "drop_approach",
     "drop_release",
     "detach_red",
-    "red_bin_staging",
-    "pickup_exit"
+    "drop_approach",
+    "middle",
+    "pickup_approach"
   ],
   "tool_yaw_rad": 3.141592653589793,
   "geometry": {
@@ -25,34 +27,24 @@
       0.97
     ],
     "middle_xyz": [
-      0.6069035796781999,
-      0.4190932102495182,
+      0.5971613927177698,
+      0.4294725705591737,
       1.261
     ],
     "drop_approach_xyz": [
-      0.57,
-      -0.39999999999999997,
+      0.53,
+      -0.32999999999999996,
       1.2309999999999999
     ],
     "drop_release_tip_xyz": [
-      0.57,
-      -0.39999999999999997,
+      0.53,
+      -0.32999999999999996,
       1.081
     ],
     "red_bin_surface_z": 1.02,
     "drop_gap_box_bottom_to_bin_m": 0.001,
     "drop_location": "red_bin_inner_corner_closest_to_robot",
-    "drop_edge_clearance_m": 0.01,
-    "pickup_exit_xyz": [
-      -0.21000000000000002,
-      0.45,
-      1.132
-    ],
-    "red_bin_staging_xyz": [
-      0.57,
-      -0.39999999999999997,
-      1.2309999999999999
-    ]
+    "drop_edge_clearance_m": 0.01
   },
   "pose_files": {
     "home": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/home_pose.json",
@@ -60,9 +52,7 @@
     "pickup_touch": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/red_automation/02_pickup_touch.json",
     "middle": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/red_automation/03_middle.json",
     "drop_approach": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/red_automation/04_drop_approach.json",
-    "drop_release": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/red_automation/05_drop_release_1mm.json",
-    "pickup_exit": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/red_automation/01_pickup_approach.json",
-    "red_bin_staging": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/red_automation/04_drop_approach.json"
+    "drop_release": "/home/osama/Safety_Fence_Project/Safety_Fence_ws/src/sorting_cell_control/config/red_automation/05_drop_release_1mm.json"
   },
   "validation": {
     "pickup_touch": {
@@ -70,16 +60,16 @@
       "orientation_error_rad": 5.740871769164383e-06
     },
     "middle": {
-      "position_error_m": 3.2753399076761612e-06,
-      "orientation_error_rad": 3.0417849292228047e-05
+      "position_error_m": 3.230731592049473e-06,
+      "orientation_error_rad": 3.0033223595325254e-05
     },
     "drop_approach": {
-      "position_error_m": 3.151837211806641e-06,
-      "orientation_error_rad": 2.838634944867322e-05
+      "position_error_m": 3.4893524594334734e-06,
+      "orientation_error_rad": 3.1672211350301644e-05
     },
     "drop_release": {
-      "position_error_m": 4.1613566551882776e-07,
-      "orientation_error_rad": 6.743297695935671e-06
+      "position_error_m": 4.02634210127854e-07,
+      "orientation_error_rad": 6.549545033409852e-06
     }
   }
 }
