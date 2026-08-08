@@ -207,6 +207,14 @@ class SortingCoordinator(
 
         self.pickup_generation = 0
 
+        # Direct next-pickup handoff.
+        #
+        # If the previous cycle moved directly to the next
+        # dynamic pickup_approach, these fields identify the
+        # exact detector event now waiting there.
+        self.direct_handoff_generation = None
+        self.direct_handoff_color = None
+
         # Depth 10 is deliberate. We do not want to lose a
         # False -> True pickup transition while executing a
         # robot action.
@@ -607,6 +615,7 @@ class SortingCoordinator(
         self,
         color: str,
         config,
+        expected_generation: int,
     ):
 
         prepared = (
@@ -619,6 +628,37 @@ class SortingCoordinator(
         prepared_approach_trajectory = None
         prepared_touch_trajectory = None
         prepared_attached_exit_trajectory = None
+
+        direct_handoff_active = (
+            self.direct_handoff_generation
+            == expected_generation
+            and self.direct_handoff_color
+            == color
+        )
+
+        if prepared is not None:
+
+            prepared_generation = int(
+                prepared.get(
+                    'generation',
+                    -1,
+                )
+            )
+
+            if (
+                prepared_generation
+                != expected_generation
+            ):
+
+                self.get_logger().warning(
+                    f'Prepared {color.upper()} pickup '
+                    f'belongs to generation '
+                    f'{prepared_generation}, while '
+                    f'generation {expected_generation} '
+                    'is required.'
+                )
+
+                prepared = None
 
         if prepared is not None:
 
@@ -753,45 +793,89 @@ class SortingCoordinator(
 
                     self.wait_for_joint_state()
 
-                    start_error = (
-                        trajectory_start_error(
-                            approach_trajectory,
-                            self.current_positions,
-                        )
-                    )
+                    if direct_handoff_active:
 
-                    self.get_logger().info(
-                        f'Prepared '
-                        f'{color.upper()} pickup '
-                        'trajectory start-state error: '
-                        f'{start_error:.6f} rad'
-                    )
-
-                    if start_error <= 0.05:
-
-                        prepared_approach_trajectory = (
-                            approach_trajectory
-                        )
-
-                        prepared_touch_trajectory = (
-                            touch_trajectory
+                        start_error = (
+                            trajectory_start_error(
+                                touch_trajectory,
+                                self.current_positions,
+                            )
                         )
 
                         self.get_logger().info(
-                            f'PREPARED '
-                            f'{color.upper()} PICKUP '
-                            'TRAJECTORY ACCEPTED.'
+                            f'Direct-handoff '
+                            f'{color.upper()} pickup-touch '
+                            'start-state error: '
+                            f'{start_error:.6f} rad'
                         )
 
+                        if start_error <= 0.05:
+
+                            prepared_touch_trajectory = (
+                                touch_trajectory
+                            )
+
+                            self.get_logger().info(
+                                f'PREPARED '
+                                f'{color.upper()} '
+                                'PICKUP-TOUCH TRAJECTORY '
+                                'ACCEPTED FROM DIRECT '
+                                'HANDOFF.'
+                            )
+
+                        else:
+
+                            self.get_logger().warning(
+                                f'Direct {color.upper()} '
+                                'handoff does not match '
+                                'the prepared pickup-touch '
+                                'start state. Online '
+                                'pickup-touch planning '
+                                'will be used.'
+                            )
+
                     else:
-                        self.get_logger().warning(
+
+                        start_error = (
+                            trajectory_start_error(
+                                approach_trajectory,
+                                self.current_positions,
+                            )
+                        )
+
+                        self.get_logger().info(
                             f'Prepared '
                             f'{color.upper()} pickup '
-                            'trajectory does not match '
-                            'the current robot state. '
-                            'Normal MoveIt pickup '
-                            'planning will be used.'
+                            'trajectory start-state error: '
+                            f'{start_error:.6f} rad'
                         )
+
+                        if start_error <= 0.05:
+
+                            prepared_approach_trajectory = (
+                                approach_trajectory
+                            )
+
+                            prepared_touch_trajectory = (
+                                touch_trajectory
+                            )
+
+                            self.get_logger().info(
+                                f'PREPARED '
+                                f'{color.upper()} PICKUP '
+                                'TRAJECTORY ACCEPTED.'
+                            )
+
+                        else:
+
+                            self.get_logger().warning(
+                                f'Prepared '
+                                f'{color.upper()} pickup '
+                                'trajectory does not match '
+                                'the current robot state. '
+                                'Normal MoveIt pickup '
+                                'planning will be used.'
+                            )
 
                 except Exception as error:
                     self.get_logger().warning(
@@ -964,6 +1048,8 @@ class SortingCoordinator(
     def execute_cycle(
         self,
         color: str,
+        generation: int,
+        allow_next_handoff: bool = True,
     ) -> None:
 
         config = self.configs[
@@ -987,12 +1073,25 @@ class SortingCoordinator(
             'inside the persistent MoveIt process.'
         )
 
+        direct_handoff_active = (
+            self.direct_handoff_generation
+            == generation
+            and self.direct_handoff_color
+            == color
+        )
+
         pickup = (
             self.get_pickup_solution(
                 color,
                 config,
+                generation,
             )
         )
+
+        # The special start state is now owned by this cycle.
+        if direct_handoff_active:
+            self.direct_handoff_generation = None
+            self.direct_handoff_color = None
 
         self.get_logger().info(
             f'Starting {color.upper()} dynamic '
@@ -1049,7 +1148,52 @@ class SortingCoordinator(
         # PICKUP
         # ----------------------------------------------------
 
-        if (
+        if direct_handoff_active:
+
+            self.get_logger().info(
+                f'PHASE 1: {color.upper()} cycle '
+                'already starts at dynamic '
+                'pickup_approach.'
+            )
+
+            self.get_logger().info(
+                'Skipping pickup_exit -> '
+                'pickup_approach.'
+            )
+
+            if (
+                pickup[
+                    'touch_trajectory'
+                ]
+                is not None
+            ):
+
+                self.execute_prepared_trajectory(
+                    (
+                        f'{color} prepared pickup: '
+                        'pickup_approach -> '
+                        'pickup_touch'
+                    ),
+                    pickup[
+                        'touch_trajectory'
+                    ],
+                )
+
+            else:
+
+                self.get_logger().info(
+                    'Planning directly from current '
+                    'pickup_approach to pickup_touch.'
+                )
+
+                self.execute_pose(
+                    'pickup_touch',
+                    poses[
+                        'pickup_touch'
+                    ],
+                )
+
+        elif (
             pickup[
                 'approach_trajectory'
             ]
@@ -1576,16 +1720,41 @@ class SortingCoordinator(
                     ],
                 )
 
-        self.execute_cached_trajectory(
-            (
-                f'{color} empty return: '
-                f'{staging_name} to '
-                'pickup_exit'
-            ),
-            config[
-                'return_cache'
-            ],
-        )
+        direct_handoff_used = False
+
+        if allow_next_handoff:
+
+            direct_handoff_used = (
+                self.try_direct_next_pickup_handoff(
+                    current_color=color,
+                    current_generation=generation,
+                    staging_name=staging_name,
+                    staging_joints=poses[
+                        staging_name
+                    ],
+                )
+            )
+
+        if not direct_handoff_used:
+
+            self.execute_cached_trajectory(
+                (
+                    f'{color} empty return: '
+                    f'{staging_name} to '
+                    'pickup_exit'
+                ),
+                config[
+                    'return_cache'
+                ],
+            )
+
+        else:
+
+            self.get_logger().info(
+                'Cached return to pickup_exit '
+                'SKIPPED because direct '
+                'next-pickup handoff succeeded.'
+            )
 
         self.get_logger().info(
             f'{color.upper()} MOVEIT '
@@ -1604,6 +1773,199 @@ class SortingCoordinator(
             f'y={drop_release[1]:.4f}, '
             f'z={drop_release[2]:.4f}'
         )
+
+
+    def try_direct_next_pickup_handoff(
+        self,
+        *,
+        current_color: str,
+        current_generation: int,
+        staging_name: str,
+        staging_joints,
+    ) -> bool:
+
+        # A newer detector event must already exist.
+        if (
+            not self.object_ready
+            or self.detected_color
+            not in VALID_COLORS
+            or self.pickup_generation
+            <= current_generation
+        ):
+            return False
+
+        next_generation = int(
+            self.pickup_generation
+        )
+
+        next_color = str(
+            self.detected_color
+        ).strip().lower()
+
+        prepared = (
+            load_prepared_pickup(
+                expected_color=next_color,
+                max_age_seconds=120.0,
+            )
+        )
+
+        if prepared is None:
+
+            self.get_logger().info(
+                'Next box exists, but T8 has not '
+                'finished preparing it. Using '
+                'pickup_exit fallback.'
+            )
+
+            return False
+
+        prepared_generation = int(
+            prepared.get(
+                'generation',
+                -1,
+            )
+        )
+
+        if (
+            prepared_generation
+            != next_generation
+        ):
+
+            self.get_logger().info(
+                'Next detector generation and T8 '
+                'generation do not match yet. '
+                'Using pickup_exit fallback.'
+            )
+
+            return False
+
+        if not bool(
+            prepared.get(
+                'trajectory_ready',
+                False,
+            )
+        ):
+
+            self.get_logger().info(
+                'Next pickup trajectory is not '
+                'ready. Using pickup_exit fallback.'
+            )
+
+            return False
+
+        next_pickup_approach = [
+            float(value)
+            for value in prepared[
+                'pickup_approach_joints'
+            ]
+        ]
+
+        self.get_logger().info(
+            '========================================'
+        )
+
+        self.get_logger().info(
+            f'DIRECT NEXT-PICKUP HANDOFF: '
+            f'{current_color.upper()} -> '
+            f'{next_color.upper()}'
+        )
+
+        self.get_logger().info(
+            f'Planning {staging_name} directly '
+            f'to generation {next_generation} '
+            'pickup_approach.'
+        )
+
+        self.get_logger().info(
+            'pickup_exit will be bypassed.'
+        )
+
+        self.get_logger().info(
+            '========================================'
+        )
+
+        try:
+
+            trajectory = (
+                self.bin_planner.plan_segment(
+                    label=(
+                        f'{current_color.upper()} '
+                        f'{staging_name} -> next '
+                        f'{next_color.upper()} '
+                        'pickup_approach'
+                    ),
+                    start_positions=list(
+                        staging_joints
+                    ),
+                    goal_positions=(
+                        next_pickup_approach
+                    ),
+                )
+            )
+
+        except Exception as error:
+
+            self.get_logger().warning(
+                'Direct next-pickup handoff '
+                f'planning failed: {error}'
+            )
+
+            self.get_logger().warning(
+                'Using existing cached return '
+                'to pickup_exit.'
+            )
+
+            return False
+
+        self.wait_for_joint_state()
+
+        start_error = (
+            trajectory_start_error(
+                trajectory,
+                self.current_positions,
+            )
+        )
+
+        self.get_logger().info(
+            'Direct handoff start-state error: '
+            f'{start_error:.6f} rad'
+        )
+
+        if start_error > 0.05:
+
+            self.get_logger().warning(
+                'Direct handoff start state does '
+                'not match the robot. Using '
+                'pickup_exit fallback.'
+            )
+
+            return False
+
+        self.execute_prepared_trajectory(
+            (
+                f'{current_color} direct handoff: '
+                f'{staging_name} -> '
+                f'{next_color} pickup_approach'
+            ),
+            trajectory,
+        )
+
+        self.direct_handoff_generation = (
+            next_generation
+        )
+
+        self.direct_handoff_color = (
+            next_color
+        )
+
+        self.get_logger().info(
+            'DIRECT HANDOFF COMPLETE. '
+            f'Robot is already at '
+            f'{next_color.upper()} '
+            'pickup_approach.'
+        )
+
+        return True
 
 
     def shutdown_background_workers(
@@ -1719,8 +2081,20 @@ def main() -> int:
                 '========================================'
             )
 
+            allow_next_handoff = (
+                arguments.max_cycles == 0
+                or (
+                    completed_cycles + 1
+                    < arguments.max_cycles
+                )
+            )
+
             node.execute_cycle(
-                color
+                color,
+                generation,
+                allow_next_handoff=(
+                    allow_next_handoff
+                ),
             )
 
             completed_cycles += 1
