@@ -407,6 +407,12 @@ class ColorSortDetector(Node):
         self.conveyor_running: Optional[bool] = None
         self.stopped_for_box = False
         self.object_latched = False
+
+        # A clear event may only be emitted for a box that
+        # genuinely reached the settled pickup state.
+        self.pickup_clear_armed = False
+        self.pickup_clear_color: Optional[str] = None
+
         self.clear_frames = 0
         self.stable_frames = 0
         self.previous_longitudinal: Optional[float] = None
@@ -440,6 +446,14 @@ class ColorSortDetector(Node):
         self.pose_publisher = self.create_publisher(
             PoseStamped,
             '/perception/box_pose',
+            10,
+        )
+
+        # Published only after the detector confirms that
+        # the physical pickup position has cleared.
+        self.pickup_cleared_publisher = self.create_publisher(
+            String,
+            '/perception/pickup_cleared_color',
             10,
         )
 
@@ -758,16 +772,48 @@ class ColorSortDetector(Node):
             self.stopped_for_box
             and self.clear_frames >= self.clear_frames_required
         ):
+            # Only a genuinely settled / latched pickup may
+            # generate a feeder event. Transient detections of
+            # the carried box must not spawn another box.
+            cleared_color = (
+                self.pickup_clear_color
+                if self.pickup_clear_armed
+                else None
+            )
+
             self.stopped_for_box = False
             self.object_latched = False
             self.clear_frames = 0
             self.stable_frames = 0
             self.previous_longitudinal = None
             self.tracked_color = None
+
             self.command_conveyor(True)
+
             self.get_logger().info(
                 'Physical pickup position is clear. Conveyor restarted.'
             )
+
+            if cleared_color in (
+                'red',
+                'green',
+                'blue',
+            ):
+                cleared_message = String()
+                cleared_message.data = cleared_color
+
+                self.pickup_cleared_publisher.publish(
+                    cleared_message
+                )
+
+                self.get_logger().info(
+                    'Published pickup-clear event for '
+                    f'{cleared_color.upper()}.'
+                )
+
+            # This pickup event has now been consumed.
+            self.pickup_clear_armed = False
+            self.pickup_clear_color = None
 
         self.publish_zone_state(object_ready)
 
@@ -781,6 +827,11 @@ class ColorSortDetector(Node):
 
             if not self.object_latched:
                 self.object_latched = True
+
+                # This exact settled pickup is now allowed
+                # to produce ONE physical-clear event.
+                self.pickup_clear_armed = True
+                self.pickup_clear_color = selected_color
 
                 self.get_logger().info(
                     f'{selected_color.upper()} box settled at the physical '

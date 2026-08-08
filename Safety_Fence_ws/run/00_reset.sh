@@ -13,6 +13,7 @@ pkill -SIGINT -f '[c]artesian_ik_move.py' 2>/dev/null || true
 # Unified sorting and parallel pickup-IK processes
 pkill -SIGINT -f '[s]orting_coordinator.py' 2>/dev/null || true
 pkill -SIGINT -f '[p]ickup_ik_preprocessor.py' 2>/dev/null || true
+pkill -SIGINT -f '[c]ontinuous_box_feeder.py' 2>/dev/null || true
 
 # Current MoveIt colour runtimes
 pkill -SIGINT -f '[r]ed_automation_moveit.py' 2>/dev/null || true
@@ -47,6 +48,7 @@ pkill -SIGKILL -f '[c]olor_sort_detector.py' 2>/dev/null || true
 pkill -SIGKILL -f '[c]olor_sort_detector' 2>/dev/null || true
 pkill -SIGKILL -f '[s]orting_coordinator.py' 2>/dev/null || true
 pkill -SIGKILL -f '[p]ickup_ik_preprocessor.py' 2>/dev/null || true
+pkill -SIGKILL -f '[c]ontinuous_box_feeder.py' 2>/dev/null || true
 pkill -SIGKILL -f '[r]ed_automation_moveit.py' 2>/dev/null || true
 pkill -SIGKILL -f '[g]reen_automation_moveit.py' 2>/dev/null || true
 pkill -SIGKILL -f '[b]lue_automation_moveit.py' 2>/dev/null || true
@@ -64,6 +66,8 @@ rm -f /tmp/safety_fence_red_bin_slots.json
 rm -f /tmp/safety_fence_green_bin_slots.json
 rm -f /tmp/safety_fence_blue_bin_slots.json
 rm -f /tmp/safety_fence_prepared_pickup.json
+rm -f /tmp/safety_fence_box_feeder_state.json
+rm -f /tmp/safety_fence_*_box_*.sdf
 
 echo
 echo "========================================"

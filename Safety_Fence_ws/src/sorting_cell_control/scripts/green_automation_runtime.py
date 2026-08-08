@@ -476,12 +476,14 @@ def solve_dynamic_pickup(
 def suction(
     node: ContinuousPoseExecutor,
     action: str,
+    box_index: int = 1,
 ) -> None:
     command_suction(
         node=node,
         colour='green',
         action=action,
         settle_seconds=SUCTION_SETTLE_SECONDS,
+        box_index=box_index,
     )
 
 

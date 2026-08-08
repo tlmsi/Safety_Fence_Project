@@ -1279,6 +1279,20 @@ class SortingCoordinator(
             'drop_release'
         ] = drop_release_joints
 
+        # Per-color physical box sequence follows the bin slot:
+        #
+        # slot 1 -> red_box / green_box / blue_box
+        # slot 2 -> red_box_02 / green_box_02 / blue_box_02
+        # ...
+        box_instance_index = (
+            int(slot.index) + 1
+        )
+
+        self.get_logger().info(
+            f'Physical {color.upper()} box '
+            f'instance: {box_instance_index}/16'
+        )
+
         self.get_logger().info(
             f'BACKGROUND {color.upper()} DROP IK READY. '
             f'Wait at pickup_touch: '
@@ -1294,6 +1308,7 @@ class SortingCoordinator(
         ](
             self,
             'attach',
+            box_index=box_instance_index,
         )
 
         manager.attach_box(
@@ -1531,6 +1546,7 @@ class SortingCoordinator(
         ](
             self,
             'detach',
+            box_index=box_instance_index,
         )
 
         manager.detach_box()
