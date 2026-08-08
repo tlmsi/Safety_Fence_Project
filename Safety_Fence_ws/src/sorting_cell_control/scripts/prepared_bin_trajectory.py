@@ -38,7 +38,7 @@ JOINT_NAMES = [
     'wrist_3_joint',
 ]
 
-SEQUENCE_BLEND_RADIUS = 0.03
+SEQUENCE_BLEND_RADIUS = 0.0
 
 ATTACH_LINK = 'suction_tip'
 
@@ -531,7 +531,7 @@ class PreparedBinTrajectoryPlanner:
         *,
         color: str,
         half_height: float,
-        staging_joints: List[float],
+        pickup_exit_joints: List[float],
         drop_approach_joints: List[float],
         drop_release_joints: List[float],
     ) -> RobotTrajectory:
@@ -540,7 +540,7 @@ class PreparedBinTrajectoryPlanner:
 
         label = (
             f'{color.upper()} attached '
-            'bin staging -> drop approach -> release'
+            'pickup_exit -> drop approach -> release'
         )
 
         self.node.get_logger().info(
@@ -568,7 +568,7 @@ class PreparedBinTrajectoryPlanner:
             request_goal = (
                 self.create_plan_only_goal(
                     label=pose_name,
-                    start_positions=staging_joints,
+                    start_positions=pickup_exit_joints,
                     goal_positions=positions,
                     attached_color=color,
                     attached_half_height=half_height,
@@ -700,12 +700,9 @@ class PreparedBinTrajectoryPlanner:
         color: str,
         slot,
         half_height: float,
-        staging_joints: List[float],
+        pickup_exit_joints: List[float],
         drop_approach_joints: List[float],
         drop_release_joints: List[float],
-        bin_surface_z: float,
-        box_size_x: float,
-        box_size_y: float,
     ):
 
         self.node.get_logger().info(
@@ -727,37 +724,30 @@ class PreparedBinTrajectoryPlanner:
 
         # ----------------------------------------------------
         # 1. Attached box:
-        # staging -> dynamic drop.
+        #
+        # pickup_exit -> dynamic drop_approach -> release
+        #
+        # There is intentionally NO bin-staging waypoint.
+        # The robot first lifts vertically clear of the pickup,
+        # then moves directly above the selected destination,
+        # then descends vertically to release.
         # ----------------------------------------------------
 
-        if slot.index == 0:
-
-            drop_trajectory = self.plan_segment(
-                label=(
-                    f'{color.upper()} attached '
-                    'bin staging -> drop release'
+        drop_trajectory = (
+            self.plan_drop_sequence(
+                color=color,
+                half_height=half_height,
+                pickup_exit_joints=(
+                    pickup_exit_joints
                 ),
-                start_positions=staging_joints,
-                goal_positions=drop_release_joints,
-                attached_color=color,
-                attached_half_height=half_height,
+                drop_approach_joints=(
+                    drop_approach_joints
+                ),
+                drop_release_joints=(
+                    drop_release_joints
+                ),
             )
-
-        else:
-
-            drop_trajectory = (
-                self.plan_drop_sequence(
-                    color=color,
-                    half_height=half_height,
-                    staging_joints=staging_joints,
-                    drop_approach_joints=(
-                        drop_approach_joints
-                    ),
-                    drop_release_joints=(
-                        drop_release_joints
-                    ),
-                )
-            )
+        )
 
         # ----------------------------------------------------
         # 2. Immediately after DETACH:
@@ -777,36 +767,6 @@ class PreparedBinTrajectoryPlanner:
             goal_positions=drop_approach_joints,
         )
 
-        # ----------------------------------------------------
-        # 3. After the retreat, the released box is inserted
-        # into the real MoveIt world. Plan the staging motion
-        # with the same box represented in this request.
-        # ----------------------------------------------------
-
-        staging_trajectory = None
-
-        if slot.index != 0:
-
-            placed_box = self.create_placed_box(
-                color=color,
-                slot=slot,
-                half_height=half_height,
-                bin_surface_z=bin_surface_z,
-                box_size_x=box_size_x,
-                box_size_y=box_size_y,
-            )
-
-            staging_trajectory = self.plan_segment(
-                label=(
-                    f'{color.upper()} empty '
-                    'drop_approach -> bin_staging '
-                    'with placed box'
-                ),
-                start_positions=drop_approach_joints,
-                goal_positions=staging_joints,
-                placed_box=placed_box,
-            )
-
         self.node.get_logger().info(
             f'PREPARED {color.upper()} BIN PATHS READY.'
         )
@@ -817,9 +777,6 @@ class PreparedBinTrajectoryPlanner:
             ),
             'retreat_trajectory': (
                 retreat_trajectory
-            ),
-            'staging_trajectory': (
-                staging_trajectory
             ),
         }
 

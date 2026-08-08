@@ -14,7 +14,7 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
-from std_msgs.msg import Bool, Float64, String
+from std_msgs.msg import Bool, Float64, String, UInt64
 from std_srvs.srv import Trigger
 
 
@@ -408,6 +408,13 @@ class ColorSortDetector(Node):
         self.stopped_for_box = False
         self.object_latched = False
 
+        # Authoritative pickup-event sequence.
+        #
+        # T7 and T8 must NEVER invent their own generation
+        # numbers. Every settled physical pickup gets exactly
+        # one ID here and both consumers receive that same ID.
+        self.pickup_generation = 0
+
         # A clear event may only be emitted for a box that
         # genuinely reached the settled pickup state.
         self.pickup_clear_armed = False
@@ -441,6 +448,14 @@ class ColorSortDetector(Node):
             Bool,
             '/perception/object_in_pickup_zone',
             10,
+        )
+
+        self.pickup_generation_publisher = (
+            self.create_publisher(
+                UInt64,
+                '/perception/pickup_generation',
+                10,
+            )
         )
 
         self.pose_publisher = self.create_publisher(
@@ -815,28 +830,61 @@ class ColorSortDetector(Node):
             self.pickup_clear_armed = False
             self.pickup_clear_color = None
 
+        # ----------------------------------------------------
+        # AUTHORITATIVE PICKUP EVENT
+        # ----------------------------------------------------
+        #
+        # Increment exactly once when a new physical box first
+        # reaches the detector's settled / latched state.
+        #
+        # Generation is created BEFORE publishing ready=True,
+        # so consumers never need to manufacture their own ID.
+        if (
+            object_ready
+            and selected_color is not None
+            and not self.object_latched
+        ):
+            self.object_latched = True
+            self.pickup_generation += 1
+
+            # This exact settled pickup is now allowed
+            # to produce ONE physical-clear event.
+            self.pickup_clear_armed = True
+            self.pickup_clear_color = selected_color
+
+            self.get_logger().info(
+                f'{selected_color.upper()} box settled at the physical '
+                'pickup position. '
+                f'Authoritative pickup generation '
+                f'{self.pickup_generation}.'
+            )
+
+        # Publish the authoritative generation continuously
+        # while the box remains settled. This is deliberate:
+        # T7 or T8 may be started / restarted AFTER the box
+        # has already arrived and must still learn its ID.
+        if (
+            object_ready
+            and selected_color is not None
+        ):
+            generation_message = UInt64()
+            generation_message.data = int(
+                self.pickup_generation
+            )
+
+            self.pickup_generation_publisher.publish(
+                generation_message
+            )
+
         self.publish_zone_state(object_ready)
 
         if object_ready and selected_color is not None:
-            # Publish the ready box color continuously while the box remains
-            # settled. This lets automation started after the stop event still
-            # receive the current color state.
+            # Publish the ready box color continuously while
+            # the box remains settled for late-starting
+            # consumers.
             color_message = String()
             color_message.data = selected_color
             self.color_publisher.publish(color_message)
-
-            if not self.object_latched:
-                self.object_latched = True
-
-                # This exact settled pickup is now allowed
-                # to produce ONE physical-clear event.
-                self.pickup_clear_armed = True
-                self.pickup_clear_color = selected_color
-
-                self.get_logger().info(
-                    f'{selected_color.upper()} box settled at the physical '
-                    'pickup position. Box pose published.'
-                )
 
         self.draw_pickup_line(frame)
 

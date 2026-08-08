@@ -9,7 +9,7 @@ import rclpy
 
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, String, UInt64
 
 from prepared_pickup import (
     PREPARED_PICKUP_FILE,
@@ -97,6 +97,13 @@ class PickupIKPreprocessor(Node):
         }
 
         self.create_subscription(
+            UInt64,
+            '/perception/pickup_generation',
+            self.generation_callback,
+            10,
+        )
+
+        self.create_subscription(
             Bool,
             '/perception/object_in_pickup_zone',
             self.ready_callback,
@@ -132,6 +139,31 @@ class PickupIKPreprocessor(Node):
             f'{PREPARED_PICKUP_FILE}'
         )
 
+    def generation_callback(
+        self,
+        message: UInt64,
+    ) -> None:
+
+        generation = int(
+            message.data
+        )
+
+        if generation <= 0:
+            return
+
+        if generation == self.generation:
+            return
+
+        self.generation = generation
+        self.samples.clear()
+        self.color = None
+        self.attempted_generation = None
+
+        self.get_logger().info(
+            'New authoritative pickup event detected: '
+            f'generation {self.generation}.'
+        )
+
     def ready_callback(
         self,
         message: Bool,
@@ -141,15 +173,9 @@ class PickupIKPreprocessor(Node):
         )
 
         if new_ready and not self.ready:
-            self.generation += 1
             self.samples.clear()
             self.color = None
             self.attempted_generation = None
-
-            self.get_logger().info(
-                f'New pickup event detected: '
-                f'generation {self.generation}.'
-            )
 
         elif not new_ready and self.ready:
             self.samples.clear()
@@ -227,6 +253,11 @@ class PickupIKPreprocessor(Node):
 
     def prepare_if_ready(self):
         if not self.ready:
+            return None
+
+        # A pickup is not valid until the detector has supplied
+        # its authoritative event ID.
+        if self.generation <= 0:
             return None
 
         if self.color not in VALID_COLORS:

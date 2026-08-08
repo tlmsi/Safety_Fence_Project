@@ -21,7 +21,7 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, String, UInt64
 
 import red_automation_moveit as moveit_base
 
@@ -215,9 +215,18 @@ class SortingCoordinator(
         self.direct_handoff_generation = None
         self.direct_handoff_color = None
 
+        # The detector owns pickup-event identity.
+        # Both T7 and T8 consume exactly the same generation.
+        self.create_subscription(
+            UInt64,
+            '/perception/pickup_generation',
+            self.generation_callback,
+            10,
+        )
+
         # Depth 10 is deliberate. We do not want to lose a
-        # False -> True pickup transition while executing a
-        # robot action.
+        # pickup-state transition while executing a robot
+        # action.
         self.create_subscription(
             Bool,
             '/perception/object_in_pickup_zone',
@@ -300,6 +309,29 @@ class SortingCoordinator(
     # Perception
     # ========================================================
 
+    def generation_callback(
+        self,
+        message: UInt64,
+    ) -> None:
+
+        generation = int(
+            message.data
+        )
+
+        if generation <= 0:
+            return
+
+        if generation == self.pickup_generation:
+            return
+
+        self.pickup_generation = generation
+        self.detected_color = None
+
+        self.get_logger().info(
+            'Authoritative pickup event available: '
+            f'generation {self.pickup_generation}.'
+        )
+
     def ready_callback(
         self,
         message: Bool,
@@ -309,26 +341,9 @@ class SortingCoordinator(
             message.data
         )
 
-        previous_ready = (
-            self.object_ready
-        )
-
         self.object_ready = ready
 
-        if (
-            ready
-            and not previous_ready
-        ):
-            self.pickup_generation += 1
-            self.detected_color = None
-
-            self.get_logger().info(
-                'New pickup event available: '
-                f'generation '
-                f'{self.pickup_generation}.'
-            )
-
-        elif not ready:
+        if not ready:
             self.detected_color = None
 
     def color_callback(
@@ -1129,17 +1144,9 @@ class SortingCoordinator(
             cached.pickup_seed
         )
 
-        staging_name = (
-            f'{color}_bin_staging'
-        )
-
-        poses[
-            staging_name
-        ] = list(
-            cached.poses[
-                'drop_approach'
-            ]
-        )
+        # Normal runtime intentionally has no bin-staging
+        # waypoint. Dynamic bin motion starts directly from
+        # pickup_exit and ends at the selected drop pose.
 
         # Dynamic drop poses are being solved in the
         # background and will be inserted after pickup.
@@ -1321,8 +1328,8 @@ class SortingCoordinator(
         # this reliability-critical handshake has finished.
 
         self.get_logger().info(
-            f'Starting COMPLETE '
-            f'{color.upper()} bin-side '
+            f'Starting DIRECT '
+            f'{color.upper()} drop + retreat '
             'trajectory preplanning in background.'
         )
 
@@ -1332,9 +1339,9 @@ class SortingCoordinator(
                 color=color,
                 slot=slot,
                 half_height=half_height,
-                staging_joints=list(
+                pickup_exit_joints=list(
                     poses[
-                        staging_name
+                        'pickup_exit'
                     ]
                 ),
                 drop_approach_joints=list(
@@ -1344,12 +1351,6 @@ class SortingCoordinator(
                     drop_release_joints
                 ),
 
-                # Current RED / GREEN / BLUE bin geometry.
-                # All three use the same surface height and
-                # 60 x 60 mm boxes.
-                bin_surface_z=1.02,
-                box_size_x=0.06,
-                box_size_y=0.06,
             )
         )
 
@@ -1410,22 +1411,12 @@ class SortingCoordinator(
             )
 
         # ----------------------------------------------------
-        # FIXED ATTACHED TRANSFER
+        # DIRECT DYNAMIC DROP
+        #
+        # Robot is currently at pickup_exit. The prepared
+        # trajectory starts HERE and travels directly to the
+        # selected drop_approach and then drop_release.
         # ----------------------------------------------------
-
-        self.execute_cached_trajectory(
-            (
-                f'{color} attached transfer: '
-                f'pickup_exit to '
-                f'{staging_name}'
-            ),
-            config[
-                'transfer_cache'
-            ],
-        )
-
-        # ----------------------------------------------------
-        # DYNAMIC DROP
         # ----------------------------------------------------
 
         bin_plan = None
@@ -1447,7 +1438,7 @@ class SortingCoordinator(
             self.get_logger().info(
                 f'BACKGROUND '
                 f'{color.upper()} BIN PATHS READY. '
-                'Wait after cached transfer: '
+                'Wait after pickup_exit: '
                 f'{bin_plan_wait_seconds:.3f} s.'
             )
 
@@ -1496,7 +1487,7 @@ class SortingCoordinator(
                 self.get_logger().warning(
                     f'Prepared {color.upper()} '
                     'dynamic drop does not match '
-                    'the actual bin-staging state. '
+                    'the actual pickup_exit state. '
                     'Online fallback will be used.'
                 )
 
@@ -1517,28 +1508,26 @@ class SortingCoordinator(
                 ],
             )
 
-        elif slot.index == 0:
+        else:
+
+            self.get_logger().info(
+                f'Online {color.upper()} direct-drop '
+                'fallback: pickup_exit -> '
+                'drop_approach -> drop_release.'
+            )
+
+            self.execute_pose(
+                'drop_approach',
+                poses[
+                    'drop_approach'
+                ],
+            )
 
             self.execute_pose(
                 'drop_release',
                 poses[
                     'drop_release'
                 ],
-            )
-
-        else:
-
-            self.execute_sequence(
-                (
-                    'PHASE 2: Dynamic '
-                    f'{color}-bin placement'
-                ),
-                [
-                    'drop_approach',
-                    'drop_release',
-                ],
-                poses,
-                blended=True,
             )
 
         config[
@@ -1657,84 +1646,12 @@ class SortingCoordinator(
         )
 
         # ----------------------------------------------------
-        # FIXED EMPTY RETURN INTERFACE
+        # DIRECT EXIT FROM DROP APPROACH
+        #
+        # The vertical retreat has already brought the robot
+        # to drop_approach. From here it goes directly either
+        # to the next pickup_approach or to pickup_exit.
         # ----------------------------------------------------
-
-        if slot.index != 0:
-
-            use_prepared_staging = False
-
-            if (
-                bin_plan is not None
-                and bin_plan[
-                    'staging_trajectory'
-                ] is not None
-            ):
-
-                staging_trajectory = (
-                    bin_plan[
-                        'staging_trajectory'
-                    ]
-                )
-
-                self.wait_for_joint_state()
-
-                staging_start_error = (
-                    trajectory_start_error(
-                        staging_trajectory,
-                        self.current_positions,
-                    )
-                )
-
-                self.get_logger().info(
-                    f'Prepared '
-                    f'{color.upper()} staging '
-                    'start-state error: '
-                    f'{staging_start_error:.6f} rad'
-                )
-
-                if staging_start_error <= 0.05:
-                    use_prepared_staging = True
-
-                else:
-                    self.get_logger().warning(
-                        f'Prepared '
-                        f'{color.upper()} staging '
-                        'trajectory does not match '
-                        'the actual drop_approach '
-                        'state. Online fallback '
-                        'will be used.'
-                    )
-
-            if use_prepared_staging:
-
-                self.get_logger().info(
-                    f'Executing PREPARED '
-                    f'{color.upper()} '
-                    'drop_approach -> '
-                    f'{staging_name}.'
-                )
-
-                self.execute_prepared_trajectory(
-                    (
-                        f'{color} prepared empty '
-                        'return interface: '
-                        'drop_approach -> '
-                        f'{staging_name}'
-                    ),
-                    bin_plan[
-                        'staging_trajectory'
-                    ],
-                )
-
-            else:
-
-                self.execute_pose(
-                    staging_name,
-                    poses[
-                        staging_name
-                    ],
-                )
 
         direct_handoff_used = False
 
@@ -1744,30 +1661,30 @@ class SortingCoordinator(
                 self.try_direct_next_pickup_handoff(
                     current_color=color,
                     current_generation=generation,
-                    staging_name=staging_name,
-                    staging_joints=poses[
-                        staging_name
+                    start_name='drop_approach',
+                    start_joints=poses[
+                        'drop_approach'
                     ],
                 )
             )
 
         if not direct_handoff_used:
 
-            self.execute_cached_trajectory(
-                (
-                    f'{color} empty return: '
-                    f'{staging_name} to '
+            self.return_directly_to_pickup_exit(
+                color=color,
+                start_name='drop_approach',
+                start_joints=poses[
+                    'drop_approach'
+                ],
+                pickup_exit_joints=poses[
                     'pickup_exit'
-                ),
-                config[
-                    'return_cache'
                 ],
             )
 
         else:
 
             self.get_logger().info(
-                'Cached return to pickup_exit '
+                'Direct return to pickup_exit '
                 'SKIPPED because direct '
                 'next-pickup handoff succeeded.'
             )
@@ -1791,13 +1708,124 @@ class SortingCoordinator(
         )
 
 
+
+    def return_directly_to_pickup_exit(
+        self,
+        *,
+        color: str,
+        start_name: str,
+        start_joints,
+        pickup_exit_joints,
+    ) -> None:
+
+        self.get_logger().info(
+            '========================================'
+        )
+
+        self.get_logger().info(
+            f'DIRECT EMPTY RETURN: '
+            f'{color.upper()} '
+            f'{start_name} -> pickup_exit'
+        )
+
+        self.get_logger().info(
+            'No bin-staging waypoint will be used.'
+        )
+
+        self.get_logger().info(
+            '========================================'
+        )
+
+        try:
+
+            trajectory = (
+                self.bin_planner.plan_segment(
+                    label=(
+                        f'{color.upper()} '
+                        f'{start_name} -> '
+                        'pickup_exit'
+                    ),
+                    start_positions=list(
+                        start_joints
+                    ),
+                    goal_positions=list(
+                        pickup_exit_joints
+                    ),
+                )
+            )
+
+        except Exception as error:
+
+            self.get_logger().warning(
+                'Direct pickup_exit return '
+                f'preplanning failed: {error}'
+            )
+
+            self.get_logger().warning(
+                'Using normal MoveIt planning '
+                'directly to pickup_exit. '
+                'Bin staging remains bypassed.'
+            )
+
+            self.execute_pose(
+                'pickup_exit',
+                list(
+                    pickup_exit_joints
+                ),
+            )
+
+            return
+
+        self.wait_for_joint_state()
+
+        start_error = (
+            trajectory_start_error(
+                trajectory,
+                self.current_positions,
+            )
+        )
+
+        self.get_logger().info(
+            'Direct pickup_exit return '
+            'start-state error: '
+            f'{start_error:.6f} rad'
+        )
+
+        if start_error > 0.05:
+
+            self.get_logger().warning(
+                'Direct pickup_exit return '
+                'start state does not match '
+                'the actual robot state. '
+                'Using normal MoveIt planning '
+                'directly to pickup_exit.'
+            )
+
+            self.execute_pose(
+                'pickup_exit',
+                list(
+                    pickup_exit_joints
+                ),
+            )
+
+            return
+
+        self.execute_prepared_trajectory(
+            (
+                f'{color} direct empty return: '
+                f'{start_name} -> pickup_exit'
+            ),
+            trajectory,
+        )
+
+
     def try_direct_next_pickup_handoff(
         self,
         *,
         current_color: str,
         current_generation: int,
-        staging_name: str,
-        staging_joints,
+        start_name: str,
+        start_joints,
     ) -> bool:
 
         # A newer detector event must already exist.
@@ -1887,7 +1915,7 @@ class SortingCoordinator(
         )
 
         self.get_logger().info(
-            f'Planning {staging_name} directly '
+            f'Planning {start_name} directly '
             f'to generation {next_generation} '
             'pickup_approach.'
         )
@@ -1906,12 +1934,12 @@ class SortingCoordinator(
                 self.bin_planner.plan_segment(
                     label=(
                         f'{current_color.upper()} '
-                        f'{staging_name} -> next '
+                        f'{start_name} -> next '
                         f'{next_color.upper()} '
                         'pickup_approach'
                     ),
                     start_positions=list(
-                        staging_joints
+                        start_joints
                     ),
                     goal_positions=(
                         next_pickup_approach
@@ -1927,8 +1955,8 @@ class SortingCoordinator(
             )
 
             self.get_logger().warning(
-                'Using existing cached return '
-                'to pickup_exit.'
+                'Using direct return to '
+                'pickup_exit instead.'
             )
 
             return False
@@ -1960,7 +1988,7 @@ class SortingCoordinator(
         self.execute_prepared_trajectory(
             (
                 f'{current_color} direct handoff: '
-                f'{staging_name} -> '
+                f'{start_name} -> '
                 f'{next_color} pickup_approach'
             ),
             trajectory,
