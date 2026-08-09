@@ -210,6 +210,7 @@ class SceneGeometry:
         self.belt_axis_x = world_from_belt[:3, 0]
         self.belt_axis_y = world_from_belt[:3, 1]
         self.belt_normal = world_from_belt[:3, 2]
+        self.belt_half_length = size[0] / 2.0
         self.belt_half_width = size[1] / 2.0
 
         top_local = np.array([0.0, 0.0, size[2] / 2.0, 1.0])
@@ -763,8 +764,12 @@ class ColorSortDetector(Node):
 
             longitudinal = self.geometry.longitudinal(world_point)
             lateral = self.geometry.lateral(world_point)
-            on_belt = abs(lateral) <= (
-                self.geometry.belt_half_width + self.belt_lateral_margin
+            on_belt = (
+                abs(longitudinal) <= self.geometry.belt_half_length
+                and abs(lateral) <= (
+                    self.geometry.belt_half_width
+                    + self.belt_lateral_margin
+                )
             )
 
             color = drawing_colors[color_name]
@@ -823,7 +828,16 @@ class ColorSortDetector(Node):
                 self.geometry.pickup_longitudinal
                 - self.stop_lead_distance
             )
-            near_pickup = selected_longitudinal >= trigger
+            downstream_limit = (
+                self.geometry.pickup_longitudinal
+                + self.pickup_tolerance
+            )
+
+            near_pickup = (
+                trigger
+                <= selected_longitudinal
+                <= downstream_limit
+            )
 
             if not self.stopped_for_box and near_pickup:
                 self.command_conveyor(False)

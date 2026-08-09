@@ -44,4 +44,4 @@ exec ros2 launch ur_simulation_gz ur_sim_control.launch.py \
     description_file:="$DESCRIPTION" \
     initial_joint_controller:=joint_trajectory_controller \
     launch_rviz:=false \
-    gazebo_gui:=false
+    gazebo_gui:=true

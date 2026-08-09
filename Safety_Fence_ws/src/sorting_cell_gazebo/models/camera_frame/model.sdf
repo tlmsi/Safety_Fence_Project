@@ -34,7 +34,7 @@
         <visualize>true</visualize>
         <topic>/sorting_camera/image</topic>
         <camera>
-          <horizontal_fov>0.5621</horizontal_fov>
+          <horizontal_fov>0.286711161</horizontal_fov>
           <image>
             <width>640</width>
             <height>480</height>
