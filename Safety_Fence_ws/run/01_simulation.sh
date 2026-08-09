@@ -6,6 +6,12 @@ source "$RUN_DIR/_common.sh"
 WORLD="$REAL_WS/src/sorting_cell_gazebo/worlds/sorting_cell_world.sdf"
 DESCRIPTION="$REAL_WS/src/sorting_cell_description/urdf/sorting_cell_ur.urdf.xacro"
 
+GAZEBO_PLUGIN_DIR="$REAL_WS/install/sorting_cell_gazebo/lib"
+
+export GZ_SIM_SYSTEM_PLUGIN_PATH="$GAZEBO_PLUGIN_DIR${GZ_SIM_SYSTEM_PLUGIN_PATH:+:$GZ_SIM_SYSTEM_PLUGIN_PATH}"
+export GZ_GUI_PLUGIN_PATH="$GAZEBO_PLUGIN_DIR${GZ_GUI_PLUGIN_PATH:+:$GZ_GUI_PLUGIN_PATH}"
+
+
 if [[ ! -f "$WORLD" ]]; then
     echo "ERROR: World file missing:"
     echo "  $WORLD"

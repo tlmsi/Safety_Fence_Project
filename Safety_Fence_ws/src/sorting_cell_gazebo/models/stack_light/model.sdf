@@ -71,9 +71,9 @@
         </geometry>
 
         <material>
-          <ambient>0.02 0.70 0.08 1</ambient>
-          <diffuse>0.04 0.95 0.12 1</diffuse>
-          <emissive>0.02 0.65 0.06 1</emissive>
+          <ambient>0.01 0.12 0.02 1</ambient>
+          <diffuse>0.02 0.20 0.03 1</diffuse>
+          <emissive>0 0 0 1</emissive>
         </material>
       </visual>
 
@@ -88,8 +88,9 @@
         </geometry>
 
         <material>
-          <ambient>0.80 0.60 0.01 1</ambient>
-          <diffuse>1.00 0.80 0.02 1</diffuse>
+          <ambient>0.14 0.10 0.01 1</ambient>
+          <diffuse>0.22 0.16 0.02 1</diffuse>
+          <emissive>0 0 0 1</emissive>
         </material>
       </visual>
 
@@ -104,8 +105,9 @@
         </geometry>
 
         <material>
-          <ambient>0.75 0.01 0.01 1</ambient>
-          <diffuse>0.95 0.02 0.02 1</diffuse>
+          <ambient>0.14 0.01 0.01 1</ambient>
+          <diffuse>0.22 0.02 0.02 1</diffuse>
+          <emissive>0 0 0 1</emissive>
         </material>
       </visual>
 

@@ -82,6 +82,17 @@ class SafetySupervisor(Node):
             )
         )
 
+        # Current physical gate state.
+        # This is bridged back into Gazebo so the gate model
+        # always follows the supervisor's accepted state.
+        self.gate_state_publisher = (
+            self.create_publisher(
+                Bool,
+                '/safety/gate_visual_open',
+                10,
+            )
+        )
+
         # ----------------------------------------------------
         # DIRECT E-STOP CONTROLLER PATH
         # ----------------------------------------------------
@@ -125,6 +136,16 @@ class SafetySupervisor(Node):
             Bool,
             '/safety/gate_open',
             self.gate_callback,
+            10,
+        )
+
+        # Persistent Gazebo GUI command channel.
+        # Unlike repeated ros2 service CLI calls, the Gazebo
+        # panel stays connected for immediate commands.
+        self.create_subscription(
+            String,
+            '/safety/gui/command',
+            self.gui_command_callback,
             10,
         )
 
@@ -235,6 +256,15 @@ class SafetySupervisor(Node):
             protective_message
         )
 
+        gate_message = Bool()
+        gate_message.data = bool(
+            self.gate_open
+        )
+
+        self.gate_state_publisher.publish(
+            gate_message
+        )
+
     def transition(
         self,
         new_state: str,
@@ -277,6 +307,81 @@ class SafetySupervisor(Node):
             'CONTROLLER SPEED SCALE: '
             f'{factor:.3f} [{reason}]'
         )
+
+    # ========================================================
+    # GAZEBO SAFETY PANEL
+    # ========================================================
+
+    def gui_command_callback(
+        self,
+        message: String,
+    ) -> None:
+
+        command = (
+            message.data
+            .strip()
+            .lower()
+        )
+
+        if command == 'gate_open':
+
+            gate_message = Bool()
+            gate_message.data = True
+
+            self.gate_callback(
+                gate_message
+            )
+
+            return
+
+        if command == 'gate_close':
+
+            gate_message = Bool()
+            gate_message.data = False
+
+            self.gate_callback(
+                gate_message
+            )
+
+            return
+
+        handlers = {
+            'resume': self.resume_callback,
+            'pause': self.pause_callback,
+            'reset': self.reset_callback,
+            'emergency_stop': self.estop_callback,
+        }
+
+        handler = handlers.get(
+            command
+        )
+
+        if handler is None:
+
+            self.get_logger().warning(
+                'Unknown Gazebo safety command: '
+                f'{command}'
+            )
+
+            return
+
+        response = handler(
+            Trigger.Request(),
+            Trigger.Response(),
+        )
+
+        level = (
+            self.get_logger().info
+            if response.success
+            else self.get_logger().warning
+        )
+
+        level(
+            'GAZEBO PANEL: '
+            f'{command} -> '
+            f'{response.message}'
+        )
+
 
     # ========================================================
     # GATE / PROTECTIVE STOP

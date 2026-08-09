@@ -23,4 +23,7 @@ echo
 
 exec ros2 run ros_gz_bridge parameter_bridge \
     '/sorting_camera/image@sensor_msgs/msg/Image[gz.msgs.Image' \
-    '/conveyor/cmd_vel@std_msgs/msg/Float64]gz.msgs.Double'
+    '/conveyor/cmd_vel@std_msgs/msg/Float64]gz.msgs.Double' \
+    '/safety/gui/command@std_msgs/msg/String[gz.msgs.StringMsg' \
+    '/safety/state@std_msgs/msg/String]gz.msgs.StringMsg' \
+    '/safety/gate_visual_open@std_msgs/msg/Bool]gz.msgs.Boolean'
