@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import math
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -404,6 +405,12 @@ class ColorSortDetector(Node):
         self.geometry = SceneGeometry(workspace)
 
         self.bridge = CvBridge()
+
+        # Conveyor defaults to inhibited until the safety
+        # supervisor explicitly grants permission.
+        self.safety_motion_allowed = False
+        self.safety_last_message_monotonic = 0.0
+
         self.conveyor_running: Optional[bool] = None
         self.stopped_for_box = False
         self.object_latched = False
@@ -430,6 +437,18 @@ class ColorSortDetector(Node):
             '/sorting_camera/image',
             self.image_callback,
             qos_profile_sensor_data,
+        )
+
+        self.safety_subscription = self.create_subscription(
+            Bool,
+            '/safety/motion_allowed',
+            self.safety_callback,
+            10,
+        )
+
+        self.safety_watchdog_timer = self.create_timer(
+            0.25,
+            self.safety_watchdog_callback,
         )
 
         self.conveyor_publisher = self.create_publisher(
@@ -497,7 +516,86 @@ class ColorSortDetector(Node):
             f'x={target[0]:.3f}, y={target[1]:.3f}'
         )
 
+    SAFETY_HEARTBEAT_TIMEOUT = 1.50
+
+    def safety_callback(
+        self,
+        message: Bool,
+    ) -> None:
+
+        self.safety_last_message_monotonic = (
+            time.monotonic()
+        )
+
+        allowed = bool(
+            message.data
+        )
+
+        previous = (
+            self.safety_motion_allowed
+        )
+
+        self.safety_motion_allowed = allowed
+
+        if allowed and not previous:
+
+            self.get_logger().info(
+                'SAFETY: conveyor permission granted.'
+            )
+
+        elif not allowed and previous:
+
+            self.get_logger().warning(
+                'SAFETY: conveyor permission removed.'
+            )
+
+        if not allowed:
+            self.command_conveyor(
+                False
+            )
+
+    def safety_watchdog_callback(
+        self,
+    ) -> None:
+
+        if (
+            self.safety_last_message_monotonic
+            <= 0.0
+        ):
+            return
+
+        age = (
+            time.monotonic()
+            - self.safety_last_message_monotonic
+        )
+
+        if (
+            age
+            <= self.SAFETY_HEARTBEAT_TIMEOUT
+        ):
+            return
+
+        if self.safety_motion_allowed:
+
+            self.get_logger().error(
+                'SAFETY SUPERVISOR HEARTBEAT LOST. '
+                'Stopping conveyor.'
+            )
+
+        self.safety_motion_allowed = False
+
+        self.command_conveyor(
+            False
+        )
+
     def command_conveyor(self, running: bool) -> None:
+
+        if (
+            running
+            and not self.safety_motion_allowed
+        ):
+            running = False
+
         if self.conveyor_running is running:
             return
 

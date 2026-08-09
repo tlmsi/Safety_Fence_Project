@@ -14,6 +14,12 @@ pkill -SIGINT -f '[c]artesian_ik_move.py' 2>/dev/null || true
 pkill -SIGINT -f '[s]orting_coordinator.py' 2>/dev/null || true
 pkill -SIGINT -f '[p]ickup_ik_preprocessor.py' 2>/dev/null || true
 pkill -SIGINT -f '[c]ontinuous_box_feeder.py' 2>/dev/null || true
+pkill -SIGINT -f '[s]afety_supervisor.py' 2>/dev/null || true
+
+# Current unified automation / safety processes
+pkill -SIGINT -f '[s]uction_manager.py' 2>/dev/null || true
+pkill -SIGINT -f '[l]oad_sorting_scene.py' 2>/dev/null || true
+pkill -SIGINT -f '[w]ait_for_ros_endpoint.py' 2>/dev/null || true
 
 # Current MoveIt colour runtimes
 pkill -SIGINT -f '[r]ed_automation_moveit.py' 2>/dev/null || true
@@ -49,6 +55,11 @@ pkill -SIGKILL -f '[c]olor_sort_detector' 2>/dev/null || true
 pkill -SIGKILL -f '[s]orting_coordinator.py' 2>/dev/null || true
 pkill -SIGKILL -f '[p]ickup_ik_preprocessor.py' 2>/dev/null || true
 pkill -SIGKILL -f '[c]ontinuous_box_feeder.py' 2>/dev/null || true
+pkill -SIGKILL -f '[s]afety_supervisor.py' 2>/dev/null || true
+# Force-kill current unified automation / safety processes
+pkill -SIGKILL -f '[s]uction_manager.py' 2>/dev/null || true
+pkill -SIGKILL -f '[l]oad_sorting_scene.py' 2>/dev/null || true
+pkill -SIGKILL -f '[w]ait_for_ros_endpoint.py' 2>/dev/null || true
 pkill -SIGKILL -f '[r]ed_automation_moveit.py' 2>/dev/null || true
 pkill -SIGKILL -f '[g]reen_automation_moveit.py' 2>/dev/null || true
 pkill -SIGKILL -f '[b]lue_automation_moveit.py' 2>/dev/null || true

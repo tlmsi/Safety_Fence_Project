@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
 import argparse
+import math
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Optional
 
 import rclpy
+
+from action_msgs.msg import GoalStatus
 
 from moveit_msgs.action import (
     ExecuteTrajectory,
@@ -196,6 +199,33 @@ class SortingCoordinator(
         )
 
         # ----------------------------------------------------
+        # Safety supervisor
+        # ----------------------------------------------------
+
+        # Fail safe until the supervisor heartbeat explicitly
+        # grants motion permission.
+        self.safety_motion_allowed = False
+        self.safety_last_message_monotonic = 0.0
+
+        self.active_goal_handle = None
+        self.active_goal_label = None
+        self.active_goal_cancel_requested = False
+
+        self.create_subscription(
+            Bool,
+            '/safety/motion_allowed',
+            self.safety_motion_callback,
+            10,
+        )
+
+        # If the supervisor disappears, motion permission
+        # expires automatically.
+        self.create_timer(
+            0.25,
+            self.safety_watchdog_callback,
+        )
+
+        # ----------------------------------------------------
         # Detector state
         # ----------------------------------------------------
 
@@ -305,6 +335,634 @@ class SortingCoordinator(
             'Persistent sorting coordinator started.'
         )
 
+
+    # ========================================================
+    # Safety
+    # ========================================================
+
+    SAFETY_HEARTBEAT_TIMEOUT = 1.50
+
+    def safety_motion_callback(
+        self,
+        message: Bool,
+    ) -> None:
+
+        self.safety_last_message_monotonic = (
+            time.monotonic()
+        )
+
+        allowed = bool(
+            message.data
+        )
+
+        previous = (
+            self.safety_motion_allowed
+        )
+
+        self.safety_motion_allowed = allowed
+
+        if allowed and not previous:
+
+            self.get_logger().info(
+                'SAFETY: motion permission granted.'
+            )
+
+        elif not allowed and previous:
+
+            self.get_logger().warning(
+                'SAFETY: motion permission removed.'
+            )
+
+        if not allowed:
+            self.cancel_active_motion(
+                'safety permission removed'
+            )
+
+    def safety_watchdog_callback(
+        self,
+    ) -> None:
+
+        if (
+            self.safety_last_message_monotonic
+            <= 0.0
+        ):
+            return
+
+        age = (
+            time.monotonic()
+            - self.safety_last_message_monotonic
+        )
+
+        if (
+            age
+            <= self.SAFETY_HEARTBEAT_TIMEOUT
+        ):
+            return
+
+        if self.safety_motion_allowed:
+
+            self.get_logger().error(
+                'SAFETY SUPERVISOR HEARTBEAT LOST. '
+                'Motion is being inhibited.'
+            )
+
+        self.safety_motion_allowed = False
+
+        self.cancel_active_motion(
+            'safety heartbeat lost'
+        )
+
+    def safety_message_is_fresh(
+        self,
+    ) -> bool:
+
+        if (
+            self.safety_last_message_monotonic
+            <= 0.0
+        ):
+            return False
+
+        return (
+            time.monotonic()
+            - self.safety_last_message_monotonic
+            <= self.SAFETY_HEARTBEAT_TIMEOUT
+        )
+
+    def cancel_active_motion(
+        self,
+        reason: str,
+    ) -> None:
+
+        if self.active_goal_handle is None:
+            return
+
+        if self.active_goal_cancel_requested:
+            return
+
+        self.active_goal_cancel_requested = True
+
+        self.get_logger().warning(
+            'SAFETY: cancelling active MoveIt goal: '
+            f'{self.active_goal_label} '
+            f'[{reason}]'
+        )
+
+        try:
+            self.active_goal_handle.cancel_goal_async()
+
+        except Exception as error:
+
+            self.get_logger().error(
+                'Could not request MoveIt goal '
+                f'cancellation: {error}'
+            )
+
+    def wait_until_safety_allows_motion(
+        self,
+        context: str,
+    ) -> None:
+
+        announced = False
+
+        while rclpy.ok():
+
+            if (
+                self.safety_motion_allowed
+                and self.safety_message_is_fresh()
+            ):
+                if announced:
+                    self.get_logger().info(
+                        'SAFETY: continuing: '
+                        f'{context}'
+                    )
+
+                return
+
+            if not announced:
+
+                self.get_logger().warning(
+                    'SAFETY: waiting in PAUSED / '
+                    f'E-STOP state before: {context}'
+                )
+
+                announced = True
+
+            rclpy.spin_once(
+                self,
+                timeout_sec=0.05,
+            )
+
+        raise KeyboardInterrupt
+
+    def wait_for_robot_after_safety_stop(
+        self,
+        seconds: float = 0.20,
+    ) -> None:
+
+        deadline = (
+            time.monotonic()
+            + seconds
+        )
+
+        while (
+            rclpy.ok()
+            and time.monotonic() < deadline
+        ):
+            rclpy.spin_once(
+                self,
+                timeout_sec=0.02,
+            )
+
+    def joint_target_error(
+        self,
+        positions,
+    ) -> float:
+
+        names = list(
+            moveit_base.JOINT_NAMES
+        )
+
+        if len(positions) != len(names):
+            return float('inf')
+
+        if not all(
+            name in self.current_positions
+            for name in names
+        ):
+            return float('inf')
+
+        errors = []
+
+        for name, target in zip(
+            names,
+            positions,
+        ):
+            current = float(
+                self.current_positions[name]
+            )
+
+            difference = math.atan2(
+                math.sin(
+                    current - float(target)
+                ),
+                math.cos(
+                    current - float(target)
+                ),
+            )
+
+            errors.append(
+                abs(difference)
+            )
+
+        return max(
+            errors,
+            default=0.0,
+        )
+
+    def trajectory_final_positions(
+        self,
+        trajectory: RobotTrajectory,
+    ):
+
+        joint_trajectory = (
+            trajectory.joint_trajectory
+        )
+
+        if not joint_trajectory.points:
+            raise RuntimeError(
+                'Trajectory contains no points.'
+            )
+
+        names = list(
+            joint_trajectory.joint_names
+        )
+
+        final = list(
+            joint_trajectory.points[
+                -1
+            ].positions
+        )
+
+        by_name = dict(
+            zip(
+                names,
+                final,
+            )
+        )
+
+        expected = list(
+            moveit_base.JOINT_NAMES
+        )
+
+        missing = [
+            name
+            for name in expected
+            if name not in by_name
+        ]
+
+        if missing:
+            raise RuntimeError(
+                'Trajectory final state is missing '
+                'joint(s): '
+                + ', '.join(missing)
+            )
+
+        return [
+            float(by_name[name])
+            for name in expected
+        ]
+
+    def run_action_goal_with_safety(
+        self,
+        *,
+        client,
+        goal,
+        label: str,
+    ):
+
+        self.wait_until_safety_allows_motion(
+            label
+        )
+
+        send_future = (
+            client.send_goal_async(
+                goal
+            )
+        )
+
+        while (
+            rclpy.ok()
+            and not send_future.done()
+        ):
+            rclpy.spin_once(
+                self,
+                timeout_sec=0.02,
+            )
+
+        goal_handle = (
+            send_future.result()
+        )
+
+        if (
+            goal_handle is None
+            or not goal_handle.accepted
+        ):
+            raise RuntimeError(
+                f'MoveIt rejected goal: {label}'
+            )
+
+        self.active_goal_handle = (
+            goal_handle
+        )
+
+        self.active_goal_label = (
+            label
+        )
+
+        self.active_goal_cancel_requested = (
+            False
+        )
+
+        # Safety may have changed while the goal request
+        # itself was being accepted.
+        if not (
+            self.safety_motion_allowed
+            and self.safety_message_is_fresh()
+        ):
+            self.cancel_active_motion(
+                'safety changed while goal was accepted'
+            )
+
+        result_future = (
+            goal_handle.get_result_async()
+        )
+
+        while (
+            rclpy.ok()
+            and not result_future.done()
+        ):
+            rclpy.spin_once(
+                self,
+                timeout_sec=0.02,
+            )
+
+            if not (
+                self.safety_motion_allowed
+                and self.safety_message_is_fresh()
+            ):
+                self.cancel_active_motion(
+                    'safety stop during MoveIt execution'
+                )
+
+        wrapped_result = (
+            result_future.result()
+        )
+
+        cancel_was_requested = (
+            self.active_goal_cancel_requested
+        )
+
+        self.active_goal_handle = None
+        self.active_goal_label = None
+        self.active_goal_cancel_requested = False
+
+        if wrapped_result is None:
+            raise RuntimeError(
+                f'MoveIt returned no result: {label}'
+            )
+
+        action_succeeded = (
+            wrapped_result.status
+            == GoalStatus.STATUS_SUCCEEDED
+        )
+
+        # A cancellation request can race with normal action
+        # completion. Only treat the trajectory as interrupted
+        # when the action did NOT finish successfully.
+        interrupted_by_safety = (
+            cancel_was_requested
+            and not action_succeeded
+        )
+
+        if (
+            cancel_was_requested
+            and action_succeeded
+        ):
+
+            self.get_logger().warning(
+                'SAFETY: cancellation was requested, '
+                'but the MoveIt goal completed before '
+                'cancellation took effect: '
+                f'{label}'
+            )
+
+            # Even though the trajectory completed, never
+            # continue the automation while safety permission
+            # is absent.
+            self.wait_until_safety_allows_motion(
+                f'continue after safety stop: {label}'
+            )
+
+        elif interrupted_by_safety:
+
+            self.get_logger().warning(
+                'SAFETY STOP CONFIRMED. '
+                f'Interrupted goal: {label}'
+            )
+
+            self.wait_until_safety_allows_motion(
+                f'resume {label}'
+            )
+
+            self.wait_for_robot_after_safety_stop()
+
+        return (
+            wrapped_result,
+            interrupted_by_safety,
+        )
+
+    # --------------------------------------------------------
+    # Override the inherited MoveGroup executor so every
+    # online movement is safety cancellable and resumes by
+    # replanning from the LIVE robot state.
+    # --------------------------------------------------------
+
+    def execute_pose(
+        self,
+        pose_name: str,
+        positions,
+    ) -> RobotTrajectory:
+
+        safety_retry = False
+
+        while rclpy.ok():
+
+            self.wait_until_safety_allows_motion(
+                f'move to {pose_name}'
+            )
+
+            self.wait_for_joint_state()
+
+            target_error = (
+                self.joint_target_error(
+                    positions
+                )
+            )
+
+            # Reaching an already-satisfied target is a valid
+            # no-op. This is especially important when a
+            # safety cancellation races with trajectory
+            # completion.
+            if target_error <= 0.010:
+
+                if safety_retry:
+
+                    self.get_logger().info(
+                        'SAFETY RESUME: target was '
+                        'already reached before the '
+                        'cancel completed: '
+                        f'{pose_name}'
+                    )
+
+                else:
+
+                    self.get_logger().info(
+                        'Target is already reached: '
+                        f'{pose_name} '
+                        f'(joint error '
+                        f'{target_error:.6f} rad).'
+                    )
+
+                return RobotTrajectory()
+
+            self.get_logger().info(
+                'Planning and executing pose: '
+                f'{pose_name}'
+            )
+
+            goal = self.create_goal(
+                pose_name,
+                positions,
+            )
+
+            (
+                wrapped_result,
+                interrupted,
+            ) = self.run_action_goal_with_safety(
+                client=self.move_group_client,
+                goal=goal,
+                label=(
+                    f'MoveGroup -> {pose_name}'
+                ),
+            )
+
+            if interrupted:
+
+                safety_retry = True
+
+                self.get_logger().info(
+                    'SAFETY RESUME: replanning '
+                    'from the actual current robot '
+                    f'state to {pose_name}.'
+                )
+
+                continue
+
+            result = (
+                wrapped_result.result
+            )
+
+            error_code = (
+                result.error_code.val
+            )
+
+            trajectory = (
+                result.planned_trajectory
+                .joint_trajectory
+            )
+
+            point_count = len(
+                trajectory.points
+            )
+
+            duration = 0.0
+
+            if trajectory.points:
+
+                final_time = (
+                    trajectory.points[-1]
+                    .time_from_start
+                )
+
+                duration = (
+                    float(final_time.sec)
+                    + float(
+                        final_time.nanosec
+                    )
+                    / 1_000_000_000.0
+                )
+
+            self.get_logger().info(
+                f'MoveIt result for {pose_name}: '
+                f'error={error_code}, '
+                f'points={point_count}, '
+                f'duration={duration:.3f} s'
+            )
+
+            if (
+                error_code
+                != MoveItErrorCodes.SUCCESS
+            ):
+                raise RuntimeError(
+                    f'MoveIt failed for '
+                    f'"{pose_name}" with '
+                    f'error code {error_code}.'
+                )
+
+            if (
+                point_count <= 1
+                or duration <= 0.0
+            ):
+                raise RuntimeError(
+                    'MoveIt returned a zero-motion '
+                    f'trajectory for "{pose_name}".'
+                )
+
+            return (
+                result.planned_trajectory
+            )
+
+        raise KeyboardInterrupt
+
+    def execute_sequence(
+        self,
+        label: str,
+        pose_names,
+        poses,
+        blended: bool = False,
+    ) -> None:
+
+        self.get_logger().info(
+            label
+        )
+
+        # Safety resume needs deterministic intermediate
+        # targets. Execute each required waypoint through the
+        # safety-aware MoveGroup executor. This also preserves
+        # exact approach / release waypoints.
+        if blended:
+
+            self.get_logger().info(
+                'Safety-aware sequence execution: '
+                'required waypoints will be executed '
+                'individually.'
+            )
+
+        for pose_name in pose_names:
+
+            self.execute_pose(
+                pose_name,
+                poses[pose_name],
+            )
+
+    def execute_cached_trajectory(
+        self,
+        label: str,
+        cache_path,
+        start_tolerance: float = 0.05,
+    ) -> None:
+
+        trajectory, _ = load_trajectory(
+            cache_path
+        )
+
+        self.execute_prepared_trajectory(
+            label,
+            trajectory,
+            start_tolerance=start_tolerance,
+        )
+
+
     # ========================================================
     # Perception
     # ========================================================
@@ -387,6 +1045,10 @@ class SortingCoordinator(
                 and self.pickup_generation
                 > after_generation
             ):
+                self.wait_until_safety_allows_motion(
+                    'start next sorting cycle'
+                )
+
                 color = (
                     self.detected_color
                 )
@@ -506,7 +1168,12 @@ class SortingCoordinator(
         label: str,
         trajectory: RobotTrajectory,
         start_tolerance: float = 0.05,
+        safety_resume_targets=None,
     ) -> None:
+
+        self.wait_until_safety_allows_motion(
+            f'prepared trajectory {label}'
+        )
 
         self.wait_for_joint_state()
 
@@ -550,55 +1217,57 @@ class SortingCoordinator(
             f'{duration:.3f} s)'
         )
 
-        goal = (
-            ExecuteTrajectory.Goal()
-        )
+        if safety_resume_targets is None:
 
+            safety_resume_targets = [
+                (
+                    f'{label} final target',
+                    self.trajectory_final_positions(
+                        trajectory
+                    ),
+                )
+            ]
+
+        goal = ExecuteTrajectory.Goal()
         goal.trajectory = trajectory
 
-        send_future = (
-            self.execute_trajectory_client
-            .send_goal_async(goal)
+        (
+            wrapped_result,
+            interrupted,
+        ) = self.run_action_goal_with_safety(
+            client=(
+                self.execute_trajectory_client
+            ),
+            goal=goal,
+            label=(
+                f'ExecuteTrajectory -> {label}'
+            ),
         )
 
-        rclpy.spin_until_future_complete(
-            self,
-            send_future,
-        )
+        if interrupted:
 
-        goal_handle = (
-            send_future.result()
-        )
-
-        if (
-            goal_handle is None
-            or not goal_handle.accepted
-        ):
-            raise RuntimeError(
-                'MoveIt rejected prepared '
-                f'trajectory: {label}'
+            self.get_logger().warning(
+                'SAFETY RESUME: the interrupted '
+                'prepared trajectory will NOT be '
+                'replayed from its old start state.'
             )
 
-        result_future = (
-            goal_handle
-            .get_result_async()
-        )
+            for (
+                target_name,
+                target_positions,
+            ) in safety_resume_targets:
 
-        rclpy.spin_until_future_complete(
-            self,
-            result_future,
-        )
+                self.get_logger().info(
+                    'SAFETY RESUME TARGET: '
+                    f'{target_name}'
+                )
 
-        wrapped_result = (
-            result_future.result()
-        )
+                self.execute_pose(
+                    target_name,
+                    list(target_positions),
+                )
 
-        if wrapped_result is None:
-            raise RuntimeError(
-                'MoveIt returned no result '
-                'for prepared trajectory: '
-                f'{label}'
-            )
+            return
 
         result = (
             wrapped_result.result
@@ -1067,6 +1736,10 @@ class SortingCoordinator(
         allow_next_handoff: bool = True,
     ) -> None:
 
+        self.wait_until_safety_allows_motion(
+            f'begin {color.upper()} sorting cycle'
+        )
+
         config = self.configs[
             color
         ]
@@ -1310,6 +1983,10 @@ class SortingCoordinator(
         # ATTACH + PICKUP EXIT
         # ----------------------------------------------------
 
+        self.wait_until_safety_allows_motion(
+            'before suction ATTACH'
+        )
+
         config[
             'suction'
         ](
@@ -1506,6 +2183,20 @@ class SortingCoordinator(
                 bin_plan[
                     'drop_trajectory'
                 ],
+                safety_resume_targets=[
+                    (
+                        'drop_approach',
+                        poses[
+                            'drop_approach'
+                        ],
+                    ),
+                    (
+                        'drop_release',
+                        poses[
+                            'drop_release'
+                        ],
+                    ),
+                ],
             )
 
         else:
@@ -1529,6 +2220,10 @@ class SortingCoordinator(
                     'drop_release'
                 ],
             )
+
+        self.wait_until_safety_allows_motion(
+            'before suction DETACH'
+        )
 
         config[
             'suction'
