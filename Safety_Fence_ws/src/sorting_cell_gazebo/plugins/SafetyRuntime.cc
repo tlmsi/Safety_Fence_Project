@@ -646,105 +646,154 @@ private:
   void PublishPnpSensors()
   {
     // --------------------------------------------------------
-    // PHYSICAL PNP GEOMETRY
+    // FOUR INDEPENDENT PNP / METAL TARGET PAIRS
     // --------------------------------------------------------
     //
-    // All four sensors have the same XY relationship but are
-    // mounted at four independent heights.
+    // CLOSED DOOR:
     //
-    // CLOSED configuration:
+    // Door thickness is approximately:
     //
-    // fixed PNP sensing face:
-    //   x = +0.609 m
-    //   y = -1.700 m
+    //   Y = -1.725 ... -1.675
     //
-    // moving metal target sensing surface:
-    //   x = +0.604 m
-    //   y = -1.700 m
+    // Sensors are distributed across this width:
     //
-    // initial non-contact air gap:
+    //   PNP1 = -1.721
+    //   PNP2 = -1.707
+    //   PNP3 = -1.693
+    //   PNP4 = -1.679
     //
-    //   0.609 - 0.604 = 0.005 m = 5 mm
+    // Corresponding target local-Y positions:
     //
-    // The target rotates with the hinged door around:
+    //   T1 = -0.021
+    //   T2 = -0.007
+    //   T3 = +0.007
+    //   T4 = +0.021
     //
-    //   hinge = (-0.600, -1.700)
+    // Therefore all four targets must align with their own
+    // stationary sensor when the gate is fully closed.
     //
-    // Target radius from hinge:
+    // X geometry remains unchanged:
     //
-    //   0.604 - (-0.600) = 1.204 m
+    //   door edge           = 0.600
+    //   metal target face   = 0.604
+    //   sensor face         = 0.609
+    //   fixed fence face    = 0.620
     //
-    // The PNP is considered ON while the target remains
-    // within 12 mm of the sensing point.
+    // Closed sensing air gap = 5 mm.
+    // Structural latch gap   = 20 mm.
 
-    constexpr double hingeX =
-      -0.600;
+    auto targetDetected =
+      [this](
+        double _sensorWorldY,
+        double _targetLocalY)
+      {
+        constexpr double hingeWorldX =
+          -0.600;
 
-    constexpr double hingeY =
-      -1.700;
+        constexpr double hingeWorldY =
+          -1.700;
 
-    constexpr double sensorX =
-      0.609;
+        constexpr double hingeLocalX =
+          -0.600;
 
-    constexpr double sensorY =
-      -1.700;
+        constexpr double targetLocalX =
+          0.604;
 
-    constexpr double targetRadius =
-      1.204;
+        constexpr double sensorWorldX =
+          0.609;
 
-    constexpr double sensingDistance =
-      0.012;
+        // Closed physical distance is 5 mm.
+        //
+        // 7 mm threshold gives only a small permitted
+        // displacement before that PNP becomes FALSE.
+        constexpr double sensingDistance =
+          0.007;
 
-    const double targetX =
-      hingeX
-      + std::cos(
-        this->currentGateYaw)
-      * targetRadius;
+        const double relativeX =
+          targetLocalX
+          - hingeLocalX;
 
-    const double targetY =
-      hingeY
-      + std::sin(
-        this->currentGateYaw)
-      * targetRadius;
+        const double relativeY =
+          _targetLocalY;
 
-    const double dx =
-      targetX - sensorX;
+        const double cosine =
+          std::cos(
+            this->currentGateYaw);
 
-    const double dy =
-      targetY - sensorY;
+        const double sine =
+          std::sin(
+            this->currentGateYaw);
 
-    const double targetDistance =
-      std::sqrt(
-        dx * dx
-        + dy * dy);
+        const double targetWorldX =
+          hingeWorldX
+          + cosine * relativeX
+          - sine * relativeY;
 
-    const bool detected =
-      targetDistance
-      <= sensingDistance;
+        const double targetWorldY =
+          hingeWorldY
+          + sine * relativeX
+          + cosine * relativeY;
 
-    // All four channels independently represent their own
-    // sensor / target pair.
-    //
-    // Normal CLOSED pattern: 1111
-    // Normal OPEN pattern:   0000
-    const bool pnp1 = detected;
-    const bool pnp2 = detected;
-    const bool pnp3 = detected;
-    const bool pnp4 = detected;
+        const double dx =
+          targetWorldX
+          - sensorWorldX;
+
+        const double dy =
+          targetWorldY
+          - _sensorWorldY;
+
+        const double distance =
+          std::sqrt(
+            dx * dx
+            + dy * dy);
+
+        return distance
+          <= sensingDistance;
+      };
+
+
+    const bool pnp1 =
+      targetDetected(
+        -1.721,
+        -0.021);
+
+    const bool pnp2 =
+      targetDetected(
+        -1.707,
+        -0.007);
+
+    const bool pnp3 =
+      targetDetected(
+        -1.693,
+        0.007);
+
+    const bool pnp4 =
+      targetDetected(
+        -1.679,
+        0.021);
+
 
     gz::msgs::Boolean message;
 
-    message.set_data(pnp1);
-    this->pnp1Publisher.Publish(message);
+    message.set_data(
+      pnp1);
+    this->pnp1Publisher.Publish(
+      message);
 
-    message.set_data(pnp2);
-    this->pnp2Publisher.Publish(message);
+    message.set_data(
+      pnp2);
+    this->pnp2Publisher.Publish(
+      message);
 
-    message.set_data(pnp3);
-    this->pnp3Publisher.Publish(message);
+    message.set_data(
+      pnp3);
+    this->pnp3Publisher.Publish(
+      message);
 
-    message.set_data(pnp4);
-    this->pnp4Publisher.Publish(message);
+    message.set_data(
+      pnp4);
+    this->pnp4Publisher.Publish(
+      message);
   }
 
 

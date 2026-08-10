@@ -151,11 +151,11 @@
            ================================================== -->
 
       <visual name="pnp1_target_visual">
-        <pose>0.602 0.000 1.45 0 0 0</pose>
+        <pose>0.602 -0.021 1.45 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.004 0.038 0.040</size>
+            <size>0.004 0.008 0.040</size>
           </box>
         </geometry>
 
@@ -167,11 +167,11 @@
       </visual>
 
       <visual name="pnp2_target_visual">
-        <pose>0.602 0.000 1.10 0 0 0</pose>
+        <pose>0.602 -0.007 1.10 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.004 0.038 0.040</size>
+            <size>0.004 0.008 0.040</size>
           </box>
         </geometry>
 
@@ -183,11 +183,11 @@
       </visual>
 
       <visual name="pnp3_target_visual">
-        <pose>0.602 0.000 0.70 0 0 0</pose>
+        <pose>0.602 0.007 0.70 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.004 0.038 0.040</size>
+            <size>0.004 0.008 0.040</size>
           </box>
         </geometry>
 
@@ -199,11 +199,11 @@
       </visual>
 
       <visual name="pnp4_target_visual">
-        <pose>0.602 0.000 0.30 0 0 0</pose>
+        <pose>0.602 0.021 0.30 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.004 0.038 0.040</size>
+            <size>0.004 0.008 0.040</size>
           </box>
         </geometry>
 

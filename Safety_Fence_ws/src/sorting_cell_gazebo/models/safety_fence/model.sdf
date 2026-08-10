@@ -316,11 +316,11 @@
       <!-- PNP1: upper closed confirmation -->
 
       <visual name="pnp1_sensor_body_visual">
-        <pose>0.615 -1.700 1.45 0 0 0</pose>
+        <pose>0.615 -1.721 1.45 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.010 0.045 0.055</size>
+            <size>0.010 0.008 0.055</size>
           </box>
         </geometry>
 
@@ -332,11 +332,11 @@
       </visual>
 
       <visual name="pnp1_sensing_face_visual">
-        <pose>0.6095 -1.700 1.45 0 0 0</pose>
+        <pose>0.6095 -1.721 1.45 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.001 0.036 0.040</size>
+            <size>0.001 0.008 0.040</size>
           </box>
         </geometry>
 
@@ -350,11 +350,11 @@
       <!-- PNP2: upper-middle closed confirmation -->
 
       <visual name="pnp2_sensor_body_visual">
-        <pose>0.615 -1.700 1.10 0 0 0</pose>
+        <pose>0.615 -1.707 1.10 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.010 0.045 0.055</size>
+            <size>0.010 0.008 0.055</size>
           </box>
         </geometry>
 
@@ -366,11 +366,11 @@
       </visual>
 
       <visual name="pnp2_sensing_face_visual">
-        <pose>0.6095 -1.700 1.10 0 0 0</pose>
+        <pose>0.6095 -1.707 1.10 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.001 0.036 0.040</size>
+            <size>0.001 0.008 0.040</size>
           </box>
         </geometry>
 
@@ -384,11 +384,11 @@
       <!-- PNP3: lower-middle closed confirmation -->
 
       <visual name="pnp3_sensor_body_visual">
-        <pose>0.615 -1.700 0.70 0 0 0</pose>
+        <pose>0.615 -1.693 0.70 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.010 0.045 0.055</size>
+            <size>0.010 0.008 0.055</size>
           </box>
         </geometry>
 
@@ -400,11 +400,11 @@
       </visual>
 
       <visual name="pnp3_sensing_face_visual">
-        <pose>0.6095 -1.700 0.70 0 0 0</pose>
+        <pose>0.6095 -1.693 0.70 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.001 0.036 0.040</size>
+            <size>0.001 0.008 0.040</size>
           </box>
         </geometry>
 
@@ -418,11 +418,11 @@
       <!-- PNP4: lower / track closed confirmation -->
 
       <visual name="pnp4_sensor_body_visual">
-        <pose>0.615 -1.700 0.30 0 0 0</pose>
+        <pose>0.615 -1.679 0.30 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.010 0.045 0.055</size>
+            <size>0.010 0.008 0.055</size>
           </box>
         </geometry>
 
@@ -434,11 +434,11 @@
       </visual>
 
       <visual name="pnp4_sensing_face_visual">
-        <pose>0.6095 -1.700 0.30 0 0 0</pose>
+        <pose>0.6095 -1.679 0.30 0 0 0</pose>
 
         <geometry>
           <box>
-            <size>0.001 0.036 0.040</size>
+            <size>0.001 0.008 0.040</size>
           </box>
         </geometry>
 
