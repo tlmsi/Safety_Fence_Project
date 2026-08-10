@@ -370,18 +370,20 @@ class SafetySupervisor(Node):
             Trigger.Response(),
         )
 
-        level = (
-            self.get_logger().info
-            if response.success
-            else self.get_logger().warning
-        )
-
-        level(
+        panel_message = (
             'GAZEBO PANEL: '
             f'{command} -> '
             f'{response.message}'
         )
 
+        if response.success:
+            self.get_logger().info(
+                panel_message
+            )
+        else:
+            self.get_logger().warning(
+                panel_message
+            )
 
     # ========================================================
     # GATE / PROTECTIVE STOP
