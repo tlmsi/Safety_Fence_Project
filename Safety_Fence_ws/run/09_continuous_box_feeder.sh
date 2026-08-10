@@ -13,6 +13,12 @@ echo
 echo "Spawn trigger:"
 echo "  confirmed physical pickup clear"
 echo
+echo "Replacement color:"
+echo "  shuffled from remaining RGB inventory"
+echo
+echo "Spawn position:"
+echo "  randomized laterally across conveyor"
+echo
 echo "Conveyor control:"
 echo "  NONE"
 echo

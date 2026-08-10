@@ -645,10 +645,27 @@ class ColorSortDetector(Node):
             ),
         }
 
-    def find_largest_object(self, mask: np.ndarray) -> Optional[DetectionResult]:
-        kernel = np.ones((5, 5), dtype=np.uint8)
-        cleaned = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel)
+    def find_objects(
+        self,
+        mask: np.ndarray,
+    ) -> list[DetectionResult]:
+
+        kernel = np.ones(
+            (5, 5),
+            dtype=np.uint8,
+        )
+
+        cleaned = cv2.morphologyEx(
+            mask,
+            cv2.MORPH_OPEN,
+            kernel,
+        )
+
+        cleaned = cv2.morphologyEx(
+            cleaned,
+            cv2.MORPH_CLOSE,
+            kernel,
+        )
 
         contours, _ = cv2.findContours(
             cleaned,
@@ -656,17 +673,36 @@ class ColorSortDetector(Node):
             cv2.CHAIN_APPROX_SIMPLE,
         )
 
-        if not contours:
-            return None
+        results: list[DetectionResult] = []
 
-        largest = max(contours, key=cv2.contourArea)
-        area = float(cv2.contourArea(largest))
+        for contour in contours:
 
-        if area < self.minimum_area:
-            return None
+            area = float(
+                cv2.contourArea(
+                    contour
+                )
+            )
 
-        x, y, width, height = cv2.boundingRect(largest)
-        return area, x, y, width, height
+            if area < self.minimum_area:
+                continue
+
+            x, y, width, height = (
+                cv2.boundingRect(
+                    contour
+                )
+            )
+
+            results.append(
+                (
+                    area,
+                    x,
+                    y,
+                    width,
+                    height,
+                )
+            )
+
+        return results
 
     def publish_zone_state(self, active: bool) -> None:
         message = Bool()
@@ -744,69 +780,121 @@ class ColorSortDetector(Node):
         candidates = []
 
         for color_name, mask in masks.items():
-            result = self.find_largest_object(mask)
-            if result is None:
-                continue
 
-            area, x, y, box_width, box_height = result
-            pixel_x = x + box_width / 2.0
-            pixel_y = y + box_height / 2.0
-
-            world_point = self.geometry.pixel_to_box_center(
-                pixel_x,
-                pixel_y,
-                width,
-                height,
+            results = self.find_objects(
+                mask
             )
 
-            if world_point is None:
-                continue
+            for result in results:
 
-            longitudinal = self.geometry.longitudinal(world_point)
-            lateral = self.geometry.lateral(world_point)
-            on_belt = (
-                abs(longitudinal) <= self.geometry.belt_half_length
-                and abs(lateral) <= (
-                    self.geometry.belt_half_width
-                    + self.belt_lateral_margin
+                (
+                    area,
+                    x,
+                    y,
+                    box_width,
+                    box_height,
+                ) = result
+
+                pixel_x = (
+                    x
+                    + box_width / 2.0
                 )
-            )
 
-            color = drawing_colors[color_name]
-            cv2.rectangle(
-                frame,
-                (x, y),
-                (x + box_width, y + box_height),
-                color,
-                2,
-            )
-            cv2.circle(
-                frame,
-                (int(round(pixel_x)), int(round(pixel_y))),
-                4,
-                color,
-                -1,
-            )
-            cv2.putText(
-                frame,
-                f'{color_name}  x={world_point[0]:+.3f} y={world_point[1]:+.3f}',
-                (x, max(20, y - 8)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.45,
-                color,
-                2,
-            )
-
-            if on_belt:
-                candidates.append(
-                    {
-                        'color': color_name,
-                        'point': world_point,
-                        'longitudinal': longitudinal,
-                        'lateral': lateral,
-                        'area': area,
-                    }
+                pixel_y = (
+                    y
+                    + box_height / 2.0
                 )
+
+                world_point = (
+                    self.geometry.pixel_to_box_center(
+                        pixel_x,
+                        pixel_y,
+                        width,
+                        height,
+                    )
+                )
+
+                if world_point is None:
+                    continue
+
+                longitudinal = (
+                    self.geometry.longitudinal(
+                        world_point
+                    )
+                )
+
+                lateral = (
+                    self.geometry.lateral(
+                        world_point
+                    )
+                )
+
+                # A candidate must physically project
+                # inside BOTH conveyor dimensions.
+                on_belt = (
+                    abs(longitudinal)
+                    <= self.geometry.belt_half_length
+                    and abs(lateral)
+                    <= (
+                        self.geometry.belt_half_width
+                        + self.belt_lateral_margin
+                    )
+                )
+
+                color = drawing_colors[
+                    color_name
+                ]
+
+                cv2.rectangle(
+                    frame,
+                    (x, y),
+                    (
+                        x + box_width,
+                        y + box_height,
+                    ),
+                    color,
+                    2,
+                )
+
+                cv2.circle(
+                    frame,
+                    (
+                        int(round(pixel_x)),
+                        int(round(pixel_y)),
+                    ),
+                    4,
+                    color,
+                    -1,
+                )
+
+                cv2.putText(
+                    frame,
+                    (
+                        f'{color_name}  '
+                        f'x={world_point[0]:+.3f} '
+                        f'y={world_point[1]:+.3f}'
+                    ),
+                    (
+                        x,
+                        max(20, y - 8),
+                    ),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45,
+                    color,
+                    2,
+                )
+
+                if on_belt:
+
+                    candidates.append(
+                        {
+                            'color': color_name,
+                            'point': world_point,
+                            'longitudinal': longitudinal,
+                            'lateral': lateral,
+                            'area': area,
+                        }
+                    )
 
         selected = max(
             candidates,

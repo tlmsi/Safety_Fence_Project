@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import random
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -27,7 +28,10 @@ SCENE_SERVICE = (
 MAX_BOX_INDEX = 16
 
 SPAWN_X = -1.235
-SPAWN_Y = 0.450
+
+SPAWN_Y_CENTER = 0.450
+SPAWN_Y_RANGE = 0.120
+
 SPAWN_Z = 0.940
 
 VALID_COLORS = (
@@ -134,6 +138,33 @@ class ContinuousBoxFeeder(Node):
             f'{index:02d}'
         )
 
+    @staticmethod
+    def random_spawn_y():
+
+        return random.uniform(
+            SPAWN_Y_CENTER - SPAWN_Y_RANGE,
+            SPAWN_Y_CENTER + SPAWN_Y_RANGE,
+        )
+
+    def remaining_color_bag(self):
+
+        bag = []
+
+        for color in VALID_COLORS:
+
+            remaining = max(
+                0,
+                MAX_BOX_INDEX
+                - self.next_index[color]
+                + 1,
+            )
+
+            bag.extend(
+                [color] * remaining
+            )
+
+        return bag
+
     def load_state(self):
 
         if not STATE_FILE.exists():
@@ -233,6 +264,7 @@ class ContinuousBoxFeeder(Node):
         self,
         color,
         index,
+        spawn_y,
     ):
 
         tree = ET.parse(
@@ -297,7 +329,7 @@ class ContinuousBoxFeeder(Node):
 
         pose.text = (
             f'{SPAWN_X:.6f} '
-            f'{SPAWN_Y:.6f} '
+            f'{spawn_y:.6f} '
             f'{SPAWN_Z:.6f} '
             '0 0 0'
         )
@@ -359,9 +391,12 @@ class ContinuousBoxFeeder(Node):
 
             return False
 
+        spawn_y = self.random_spawn_y()
+
         sdf = self.create_sdf(
             color,
             index,
+            spawn_y,
         )
 
         request = (
@@ -377,6 +412,7 @@ class ContinuousBoxFeeder(Node):
             self.get_logger().info(
                 f'Spawning FREE box '
                 f'{name} at conveyor entrance '
+                f'y={spawn_y:+.3f} m '
                 f'({attempt}/3).'
             )
 
@@ -435,7 +471,8 @@ class ContinuousBoxFeeder(Node):
                 self.get_logger().info(
                     f'SPAWN COMPLETE: '
                     f'{name} is FREE '
-                    'on the conveyor.'
+                    'on the conveyor at '
+                    f'y={spawn_y:+.3f} m.'
                 )
 
                 return True
@@ -456,20 +493,22 @@ class ContinuousBoxFeeder(Node):
         message,
     ):
 
-        color = (
+        cleared_color = (
             message.data
             .strip()
             .lower()
         )
 
-        if color not in VALID_COLORS:
+        if cleared_color not in VALID_COLORS:
             return
 
         now = time.monotonic()
 
         elapsed = (
             now
-            - self.last_clear_time[color]
+            - self.last_clear_time[
+                cleared_color
+            ]
         )
 
         if (
@@ -479,7 +518,7 @@ class ContinuousBoxFeeder(Node):
 
             self.get_logger().warning(
                 f'IGNORING duplicate '
-                f'{color.upper()} '
+                f'{cleared_color.upper()} '
                 'pickup-clear event after '
                 f'{elapsed:.2f} s.'
             )
@@ -487,31 +526,26 @@ class ContinuousBoxFeeder(Node):
             return
 
         self.last_clear_time[
-            color
+            cleared_color
         ] = now
-
-        index = self.next_index[
-            color
-        ]
 
         self.get_logger().info(
             '========================================'
         )
 
         self.get_logger().info(
-            f'{color.upper()} PICKUP '
+            f'{cleared_color.upper()} PICKUP '
             'PHYSICALLY CLEARED'
         )
 
-        if (
-            index
-            > MAX_BOX_INDEX
-        ):
+        remaining_bag = (
+            self.remaining_color_bag()
+        )
+
+        if not remaining_bag:
 
             self.get_logger().info(
-                f'All 16 '
-                f'{color.upper()} boxes '
-                'have been introduced.'
+                'All 48 boxes have been introduced.'
             )
 
             self.get_logger().info(
@@ -524,18 +558,32 @@ class ContinuousBoxFeeder(Node):
 
             return
 
+        spawn_color = random.choice(
+            remaining_bag
+        )
+
+        index = self.next_index[
+            spawn_color
+        ]
+
         name = self.model_name(
-            color,
+            spawn_color,
             index,
         )
 
         self.get_logger().info(
+            'SHUFFLED NEXT COLOR: '
+            f'{spawn_color.upper()}'
+        )
+
+        self.get_logger().info(
             f'Introducing exactly ONE '
-            f'FREE replacement: {name}'
+            f'FREE shuffled replacement: '
+            f'{name}'
         )
 
         if not self.spawn(
-            color,
+            spawn_color,
             index,
         ):
 
@@ -550,21 +598,38 @@ class ContinuousBoxFeeder(Node):
             return
 
         self.next_index[
-            color
+            spawn_color
         ] = (
             index + 1
         )
 
         self.save_state()
 
+        remaining = {
+            color: max(
+                0,
+                MAX_BOX_INDEX
+                - self.next_index[color]
+                + 1,
+            )
+            for color in VALID_COLORS
+        }
+
         self.get_logger().info(
-            f'{color.upper()} introduced: '
+            f'{spawn_color.upper()} introduced: '
             f'{index}/16'
         )
 
         self.get_logger().info(
+            'Remaining unintroduced boxes: '
+            f'RED={remaining["red"]}, '
+            f'GREEN={remaining["green"]}, '
+            f'BLUE={remaining["blue"]}'
+        )
+
+        self.get_logger().info(
             'Three-box conveyor pipeline '
-            'restored.'
+            'restored with shuffled color.'
         )
 
         self.get_logger().info(

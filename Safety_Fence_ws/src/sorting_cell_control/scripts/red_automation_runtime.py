@@ -54,7 +54,6 @@ PICKUP_SEED_POSE = 'pickup_approach'
 PICKUP_CLEARANCE_METRES = 0.15
 
 # Reject clearly invalid perception coordinates before moving the robot.
-MAX_HORIZONTAL_SHIFT_METRES = 0.10
 MAX_VERTICAL_SHIFT_METRES = 0.025
 
 # Average several ready pose messages to reduce pixel-level jitter.
@@ -339,26 +338,12 @@ def validate_detected_pose(
     expected_center = expected_touch.copy()
     expected_center[2] -= half_height
 
-    horizontal_shift = float(
-        np.linalg.norm(
-            box_center[:2]
-            - expected_center[:2]
-        )
-    )
-
     vertical_shift = abs(
         float(
             box_center[2]
             - expected_center[2]
         )
     )
-
-    if horizontal_shift > MAX_HORIZONTAL_SHIFT_METRES:
-        raise RuntimeError(
-            'Detected box is too far from the pickup workspace: '
-            f'horizontal shift={horizontal_shift:.3f} m, '
-            f'limit={MAX_HORIZONTAL_SHIFT_METRES:.3f} m.'
-        )
 
     if vertical_shift > MAX_VERTICAL_SHIFT_METRES:
         raise RuntimeError(
