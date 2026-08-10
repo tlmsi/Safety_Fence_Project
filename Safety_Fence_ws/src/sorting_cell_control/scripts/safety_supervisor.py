@@ -25,6 +25,8 @@ STATE_ESTOP = 'E_STOP'
 # smoothly to zero instead of applying an immediate halt.
 CONTROLLED_STOP_DURATION_SECONDS = 1.50
 
+PNP_HEARTBEAT_TIMEOUT_SECONDS = 0.50
+
 
 class SafetySupervisor(Node):
 
@@ -41,9 +43,36 @@ class SafetySupervisor(Node):
         # An explicit Resume is required.
         self.state = STATE_MANUAL_PAUSE
 
-        # Gate is initially assumed closed in the simulation.
-        # The Gazebo gate sensor will later own this input.
-        self.gate_open = False
+        # Four physical PNP proximity channels now own the
+        # gate safety state.
+        #
+        # Fail-safe startup: until all four channels confirm
+        # their metal targets, the door is considered OPEN.
+        self.gate_open = True
+
+        self.pnp_values = [
+            False,
+            False,
+            False,
+            False,
+        ]
+
+        self.pnp_seen = [
+            False,
+            False,
+            False,
+            False,
+        ]
+
+        self.pnp_last_monotonic = [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ]
+
+        self.pnp_feedback_healthy = False
+        self.last_pnp_pattern = None
 
         # Controlled safety stop state.
         #
@@ -144,18 +173,32 @@ class SafetySupervisor(Node):
         # INPUTS
         # ----------------------------------------------------
         #
-        # For now this can be tested manually:
+        # Four independent PNP channels.
         #
-        #   data: true  -> gate opened
-        #   data: false -> gate closed
+        # ONLY 1111 is safely CLOSED.
         #
-        # Later the Gazebo safety gate sensor will publish it.
-        self.create_subscription(
-            Bool,
-            '/safety/gate_open',
-            self.gate_callback,
-            10,
-        )
+        # Any other pattern means OPEN / MISALIGNED /
+        # SENSOR FAULT and is treated fail-safe.
+        for index, topic in enumerate(
+            (
+                '/safety/pnp1',
+                '/safety/pnp2',
+                '/safety/pnp3',
+                '/safety/pnp4',
+            )
+        ):
+            self.create_subscription(
+                Bool,
+                topic,
+                (
+                    lambda message, sensor=index:
+                    self.pnp_callback(
+                        sensor,
+                        message,
+                    )
+                ),
+                10,
+            )
 
         # Persistent Gazebo GUI command channel.
         # Unlike repeated ros2 service CLI calls, the Gazebo
@@ -193,6 +236,12 @@ class SafetySupervisor(Node):
             Trigger,
             '/safety/reset',
             self.reset_callback,
+        )
+
+        # PNP feedback is continuously supervised.
+        self.create_timer(
+            0.10,
+            self.pnp_watchdog_callback,
         )
 
         # Repeated publication is intentional.
@@ -537,24 +586,21 @@ class SafetySupervisor(Node):
             .lower()
         )
 
-        if command == 'gate_open':
+        if command in (
+            'gate_open',
+            'gate_close',
+        ):
 
-            gate_message = Bool()
-            gate_message.data = True
-
-            self.gate_callback(
-                gate_message
-            )
-
-            return
-
-        if command == 'gate_close':
-
-            gate_message = Bool()
-            gate_message.data = False
-
-            self.gate_callback(
-                gate_message
+            # SafetyRuntime receives this same Gazebo GUI
+            # command directly and moves the physical door.
+            #
+            # T11 does NOT assume the requested movement
+            # occurred. It waits for the four PNP sensors.
+            self.get_logger().info(
+                'GAZEBO PANEL: '
+                f'{command} -> '
+                'physical door command sent; '
+                'waiting for PNP feedback.'
             )
 
             return
@@ -598,6 +644,159 @@ class SafetySupervisor(Node):
             self.get_logger().warning(
                 panel_message
             )
+
+    # ========================================================
+    # FOUR PNP SAFETY-GATE CHANNELS
+    # ========================================================
+
+    def pnp_callback(
+        self,
+        sensor_index: int,
+        message: Bool,
+    ) -> None:
+
+        if not 0 <= sensor_index < 4:
+            return
+
+        now = time.monotonic()
+
+        self.pnp_values[
+            sensor_index
+        ] = bool(
+            message.data
+        )
+
+        self.pnp_seen[
+            sensor_index
+        ] = True
+
+        self.pnp_last_monotonic[
+            sensor_index
+        ] = now
+
+        # Never declare the door closed until every channel
+        # has been observed.
+        if not all(
+            self.pnp_seen
+        ):
+            return
+
+        fresh = all(
+            (
+                now - timestamp
+                <= PNP_HEARTBEAT_TIMEOUT_SECONDS
+            )
+            for timestamp
+            in self.pnp_last_monotonic
+        )
+
+        if (
+            fresh
+            and not self.pnp_feedback_healthy
+        ):
+
+            self.pnp_feedback_healthy = True
+
+            self.get_logger().info(
+                'PNP GATE FEEDBACK HEALTHY.'
+            )
+
+        pattern = tuple(
+            self.pnp_values
+        )
+
+        if pattern != self.last_pnp_pattern:
+
+            self.last_pnp_pattern = pattern
+
+            pattern_text = ''.join(
+                '1' if value else '0'
+                for value in pattern
+            )
+
+            if pattern == (
+                True,
+                True,
+                True,
+                True,
+            ):
+
+                self.get_logger().info(
+                    'PNP GATE: '
+                    f'{pattern_text} -> '
+                    'CLOSED'
+                )
+
+            else:
+
+                self.get_logger().warning(
+                    'PNP GATE: '
+                    f'{pattern_text} -> '
+                    'OPEN / UNSAFE'
+                )
+
+        safe_closed = (
+            fresh
+            and pattern
+            == (
+                True,
+                True,
+                True,
+                True,
+            )
+        )
+
+        gate_message = Bool()
+        gate_message.data = (
+            not safe_closed
+        )
+
+        self.gate_callback(
+            gate_message
+        )
+
+
+    def pnp_watchdog_callback(
+        self,
+    ) -> None:
+
+        now = time.monotonic()
+
+        healthy = (
+            all(
+                self.pnp_seen
+            )
+            and all(
+                (
+                    now - timestamp
+                    <= PNP_HEARTBEAT_TIMEOUT_SECONDS
+                )
+                for timestamp
+                in self.pnp_last_monotonic
+            )
+        )
+
+        if healthy:
+            return
+
+        if self.pnp_feedback_healthy:
+
+            self.pnp_feedback_healthy = False
+
+            self.get_logger().error(
+                'PNP GATE HEARTBEAT LOST. '
+                'Gate is being treated as OPEN.'
+            )
+
+        if not self.gate_open:
+
+            gate_message = Bool()
+            gate_message.data = True
+
+            self.gate_callback(
+                gate_message
+            )
+
 
     # ========================================================
     # GATE / PROTECTIVE STOP

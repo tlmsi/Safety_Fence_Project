@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <mutex>
 #include <memory>
 #include <optional>
@@ -48,9 +50,25 @@ public:
       this);
 
     this->node.Subscribe(
-      "/safety/gate_visual_open",
-      &SafetyRuntime::OnGateState,
+      "/safety/gui/command",
+      &SafetyRuntime::OnGuiCommand,
       this);
+
+    this->pnp1Publisher =
+      this->node.Advertise<gz::msgs::Boolean>(
+        "/safety/pnp1");
+
+    this->pnp2Publisher =
+      this->node.Advertise<gz::msgs::Boolean>(
+        "/safety/pnp2");
+
+    this->pnp3Publisher =
+      this->node.Advertise<gz::msgs::Boolean>(
+        "/safety/pnp3");
+
+    this->pnp4Publisher =
+      this->node.Advertise<gz::msgs::Boolean>(
+        "/safety/pnp4");
   }
 
 
@@ -83,17 +101,68 @@ public:
 
     this->ResolveEntities(_ecm);
 
+    const double simSeconds =
+      std::chrono::duration_cast<
+        std::chrono::duration<double>>(
+          _info.simTime).count();
+
     if (!this->initialized)
     {
-      this->ApplyGate(_ecm);
-      this->ApplyLights(_ecm, true);
+      // CLOSED:
+      // door lies along the front fence at yaw = 0.
+      this->currentGateYaw = 0.0;
+      this->gateTargetYaw = 0.0;
+
+      this->ApplyGatePose(
+        _ecm,
+        this->currentGateYaw);
+
+      this->ApplyLights(
+        _ecm,
+        true);
 
       this->initialized = true;
     }
 
+    // Advance an active hinge movement before processing a
+    // possible reversal request.
+    this->UpdateGateMotion(
+      simSeconds,
+      _ecm);
+
     if (gateChanged)
     {
-      this->ApplyGate(_ecm);
+      this->StartGateMotion(
+        this->gateOpen,
+        simSeconds);
+
+      this->UpdateGateMotion(
+        simSeconds,
+        _ecm);
+    }
+
+    const auto pnpMilliseconds =
+      std::chrono::duration_cast<
+        std::chrono::milliseconds>(
+          _info.simTime).count();
+
+    if (
+      !this->pnpPublished
+      || pnpMilliseconds
+        < this->lastPnpPublishMs
+      || (
+        pnpMilliseconds
+        - this->lastPnpPublishMs
+      ) >= 100
+    )
+    {
+      this->PublishPnpSensors();
+
+      this->lastPnpPublishMs =
+        pnpMilliseconds;
+
+      this->pnpPublished =
+        true;
     }
 
     if (stateChanged)
@@ -133,14 +202,25 @@ private:
 
 
 private:
-  void OnGateState(
-    const gz::msgs::Boolean &_message)
+  void OnGuiCommand(
+    const gz::msgs::StringMsg &_message)
   {
+    const std::string command =
+      _message.data();
+
+    if (
+      command != "gate_open"
+      && command != "gate_close"
+    )
+    {
+      return;
+    }
+
     std::lock_guard<std::mutex> lock(
       this->mutex);
 
     this->pendingGate =
-      _message.data();
+      (command == "gate_open");
   }
 
 
@@ -316,8 +396,9 @@ private:
 
 
 private:
-  void ApplyGate(
-    gz::sim::EntityComponentManager &_ecm)
+  void ApplyGatePose(
+    gz::sim::EntityComponentManager &_ecm,
+    double _yaw)
   {
     if (
       this->gateEntity
@@ -326,20 +407,344 @@ private:
       return;
     }
 
-    const gz::math::Pose3d closedPose(
-      0.000000000, -1.700000000, 0.000000000, 0.000000000, 0.000000000, 0.000000000);
+    // --------------------------------------------------------
+    // HINGE GEOMETRY
+    // --------------------------------------------------------
+    //
+    // At the CLOSED pose:
+    //
+    //   gate model origin = (0.00, -1.70)
+    //   left physical edge = -0.60 m
+    //
+    // The fixed left gate post ends at approximately x=-0.60,
+    // so this is the natural hinge axis.
+    //
+    // We cannot simply rotate the model around its own centre,
+    // because that would make the whole door orbit around its
+    // middle.
+    //
+    // Instead we calculate a new model origin for every angle
+    // so that the LEFT EDGE remains fixed in world space.
+    //
+    // Hinge world position:
+    //
+    //   X = -0.60
+    //   Y = -1.70
+    //
+    // Door swings OUTWARD toward negative Y.
 
-    const gz::math::Pose3d openPose(
-      1.300000000, -1.700000000, 0.000000000, 0.000000000, 0.000000000, 0.000000000);
+    constexpr double hingeWorldX =
+      -0.600000000;
+
+    constexpr double hingeWorldY =
+      -1.700000000;
+
+    constexpr double hingeLocalX =
+      -0.600000000;
+
+    constexpr double hingeLocalY =
+      0.000000000;
+
+    const double cosine =
+      std::cos(_yaw);
+
+    const double sine =
+      std::sin(_yaw);
+
+    const double rotatedHingeX =
+      cosine * hingeLocalX
+      - sine * hingeLocalY;
+
+    const double rotatedHingeY =
+      sine * hingeLocalX
+      + cosine * hingeLocalY;
+
+    // Move the model origin so the hinge point itself stays
+    // stationary while the rest of the door rotates around it.
+    const double modelX =
+      hingeWorldX
+      - rotatedHingeX;
+
+    const double modelY =
+      hingeWorldY
+      - rotatedHingeY;
+
+    const gz::math::Pose3d gatePose(
+      modelX,
+      modelY,
+      0.0,
+      0.0,
+      0.0,
+      _yaw);
 
     gz::sim::Model gateModel(
       this->gateEntity);
 
     gateModel.SetWorldPoseCmd(
       _ecm,
-      this->gateOpen
-        ? openPose
-        : closedPose);
+      gatePose);
+  }
+
+
+private:
+  void StartGateMotion(
+    bool _open,
+    double _simSeconds)
+  {
+    constexpr double closedYaw =
+      0.0;
+
+    // -90 degrees.
+    //
+    // Negative yaw makes the door swing from the front fence
+    // toward negative Y: backwards / outside the robot cell.
+    constexpr double openYaw =
+      -1.5707963267948966;
+
+    constexpr double fullTravelAngle =
+      1.5707963267948966;
+
+    // Keep the same smooth-motion duration used by the
+    // previous door animation.
+    constexpr double fullTravelDurationSeconds =
+      2.0;
+
+    const double requestedTarget =
+      _open
+        ? openYaw
+        : closedYaw;
+
+    this->gateMotionStartYaw =
+      this->currentGateYaw;
+
+    this->gateTargetYaw =
+      requestedTarget;
+
+    this->gateMotionStartSeconds =
+      _simSeconds;
+
+    const double remainingAngle =
+      std::abs(
+        this->gateTargetYaw
+        - this->gateMotionStartYaw);
+
+    if (remainingAngle <= 0.000001)
+    {
+      this->currentGateYaw =
+        this->gateTargetYaw;
+
+      this->gateMotionDurationSeconds =
+        0.0;
+
+      this->gateMotionActive =
+        false;
+
+      return;
+    }
+
+    // Reversing halfway through takes proportionally less
+    // time than travelling the full 90 degrees.
+    this->gateMotionDurationSeconds =
+      fullTravelDurationSeconds
+      * (
+        remainingAngle
+        / fullTravelAngle
+      );
+
+    this->gateMotionActive =
+      true;
+  }
+
+
+private:
+  void UpdateGateMotion(
+    double _simSeconds,
+    gz::sim::EntityComponentManager &_ecm)
+  {
+    if (!this->gateMotionActive)
+    {
+      return;
+    }
+
+    if (
+      this->gateMotionDurationSeconds
+      <= 0.0)
+    {
+      this->currentGateYaw =
+        this->gateTargetYaw;
+
+      this->gateMotionActive =
+        false;
+
+      this->ApplyGatePose(
+        _ecm,
+        this->currentGateYaw);
+
+      return;
+    }
+
+    double progress =
+      (
+        _simSeconds
+        - this->gateMotionStartSeconds
+      )
+      / this->gateMotionDurationSeconds;
+
+    progress =
+      std::max(
+        0.0,
+        std::min(
+          1.0,
+          progress));
+
+    // Smooth-step motion:
+    //
+    //   3t² - 2t³
+    //
+    // Starts gently, moves faster through the middle, and
+    // slows again as the door reaches its final angle.
+    const double easedProgress =
+      progress
+      * progress
+      * (
+        3.0
+        - 2.0 * progress
+      );
+
+    this->currentGateYaw =
+      this->gateMotionStartYaw
+      + (
+        this->gateTargetYaw
+        - this->gateMotionStartYaw
+      )
+      * easedProgress;
+
+    this->ApplyGatePose(
+      _ecm,
+      this->currentGateYaw);
+
+    if (progress >= 1.0)
+    {
+      this->currentGateYaw =
+        this->gateTargetYaw;
+
+      this->gateMotionActive =
+        false;
+
+      // Apply exact endpoint:
+      //
+      // CLOSED = 0 degrees
+      // OPEN   = -90 degrees
+      this->ApplyGatePose(
+        _ecm,
+        this->currentGateYaw);
+    }
+  }
+
+
+private:
+  void PublishPnpSensors()
+  {
+    // --------------------------------------------------------
+    // PHYSICAL PNP GEOMETRY
+    // --------------------------------------------------------
+    //
+    // All four sensors have the same XY relationship but are
+    // mounted at four independent heights.
+    //
+    // CLOSED configuration:
+    //
+    // fixed PNP sensing face:
+    //   x = +0.609 m
+    //   y = -1.700 m
+    //
+    // moving metal target sensing surface:
+    //   x = +0.604 m
+    //   y = -1.700 m
+    //
+    // initial non-contact air gap:
+    //
+    //   0.609 - 0.604 = 0.005 m = 5 mm
+    //
+    // The target rotates with the hinged door around:
+    //
+    //   hinge = (-0.600, -1.700)
+    //
+    // Target radius from hinge:
+    //
+    //   0.604 - (-0.600) = 1.204 m
+    //
+    // The PNP is considered ON while the target remains
+    // within 12 mm of the sensing point.
+
+    constexpr double hingeX =
+      -0.600;
+
+    constexpr double hingeY =
+      -1.700;
+
+    constexpr double sensorX =
+      0.609;
+
+    constexpr double sensorY =
+      -1.700;
+
+    constexpr double targetRadius =
+      1.204;
+
+    constexpr double sensingDistance =
+      0.012;
+
+    const double targetX =
+      hingeX
+      + std::cos(
+        this->currentGateYaw)
+      * targetRadius;
+
+    const double targetY =
+      hingeY
+      + std::sin(
+        this->currentGateYaw)
+      * targetRadius;
+
+    const double dx =
+      targetX - sensorX;
+
+    const double dy =
+      targetY - sensorY;
+
+    const double targetDistance =
+      std::sqrt(
+        dx * dx
+        + dy * dy);
+
+    const bool detected =
+      targetDistance
+      <= sensingDistance;
+
+    // All four channels independently represent their own
+    // sensor / target pair.
+    //
+    // Normal CLOSED pattern: 1111
+    // Normal OPEN pattern:   0000
+    const bool pnp1 = detected;
+    const bool pnp2 = detected;
+    const bool pnp3 = detected;
+    const bool pnp4 = detected;
+
+    gz::msgs::Boolean message;
+
+    message.set_data(pnp1);
+    this->pnp1Publisher.Publish(message);
+
+    message.set_data(pnp2);
+    this->pnp2Publisher.Publish(message);
+
+    message.set_data(pnp3);
+    this->pnp3Publisher.Publish(message);
+
+    message.set_data(pnp4);
+    this->pnp4Publisher.Publish(message);
   }
 
 
@@ -530,6 +935,22 @@ private:
 private:
   gz::transport::Node node;
 
+  gz::transport::Node::Publisher
+    pnp1Publisher;
+
+  gz::transport::Node::Publisher
+    pnp2Publisher;
+
+  gz::transport::Node::Publisher
+    pnp3Publisher;
+
+  gz::transport::Node::Publisher
+    pnp4Publisher;
+
+  long long lastPnpPublishMs{-1000};
+
+  bool pnpPublished{false};
+
   std::mutex mutex;
 
   std::optional<std::string>
@@ -542,6 +963,25 @@ private:
     "MANUAL_PAUSE"};
 
   bool gateOpen{false};
+
+  // Smooth hinged gate motion.
+  //
+  // CLOSED = 0 rad
+  // OPEN   = -pi/2 rad
+  //
+  // The model origin is translated automatically while
+  // rotating so the physical hinge remains stationary.
+  double currentGateYaw{0.0};
+
+  double gateMotionStartYaw{0.0};
+
+  double gateTargetYaw{0.0};
+
+  double gateMotionStartSeconds{0.0};
+
+  double gateMotionDurationSeconds{0.0};
+
+  bool gateMotionActive{false};
 
   bool initialized{false};
 

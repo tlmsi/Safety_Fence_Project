@@ -18,6 +18,7 @@ echo "========================================"
 echo
 echo "Camera:   Gazebo -> ROS"
 echo "Conveyor: ROS -> Gazebo"
+echo "PNP gate: Gazebo -> ROS (4 channels)"
 echo "Clock:    provided by the simulation"
 echo
 
@@ -26,4 +27,8 @@ exec ros2 run ros_gz_bridge parameter_bridge \
     '/conveyor/cmd_vel@std_msgs/msg/Float64]gz.msgs.Double' \
     '/safety/gui/command@std_msgs/msg/String[gz.msgs.StringMsg' \
     '/safety/state@std_msgs/msg/String]gz.msgs.StringMsg' \
-    '/safety/gate_visual_open@std_msgs/msg/Bool]gz.msgs.Boolean'
+    '/safety/gate_visual_open@std_msgs/msg/Bool]gz.msgs.Boolean' \
+    '/safety/pnp1@std_msgs/msg/Bool[gz.msgs.Boolean' \
+    '/safety/pnp2@std_msgs/msg/Bool[gz.msgs.Boolean' \
+    '/safety/pnp3@std_msgs/msg/Bool[gz.msgs.Boolean' \
+    '/safety/pnp4@std_msgs/msg/Bool[gz.msgs.Boolean'

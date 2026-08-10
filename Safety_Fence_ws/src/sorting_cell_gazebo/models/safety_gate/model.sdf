@@ -135,6 +135,85 @@
         </material>
       </visual>
 
+
+      <!-- ==================================================
+           METAL TARGET PLATES FOR THE FOUR PNP SENSORS
+
+           The gate right edge is x = +0.600 m.
+
+           Each plate is attached directly to that edge and
+           protrudes 4 mm into the 20 mm latch-side clearance.
+
+           At the CLOSED position:
+             target outer surface = x 0.604
+             PNP sensing face     = x 0.609
+             air gap              = 5 mm
+           ================================================== -->
+
+      <visual name="pnp1_target_visual">
+        <pose>0.602 0.000 1.45 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.004 0.038 0.040</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.48 0.50 0.53 1</ambient>
+          <diffuse>0.78 0.81 0.84 1</diffuse>
+          <specular>0.90 0.90 0.90 1</specular>
+        </material>
+      </visual>
+
+      <visual name="pnp2_target_visual">
+        <pose>0.602 0.000 1.10 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.004 0.038 0.040</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.48 0.50 0.53 1</ambient>
+          <diffuse>0.78 0.81 0.84 1</diffuse>
+          <specular>0.90 0.90 0.90 1</specular>
+        </material>
+      </visual>
+
+      <visual name="pnp3_target_visual">
+        <pose>0.602 0.000 0.70 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.004 0.038 0.040</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.48 0.50 0.53 1</ambient>
+          <diffuse>0.78 0.81 0.84 1</diffuse>
+          <specular>0.90 0.90 0.90 1</specular>
+        </material>
+      </visual>
+
+      <visual name="pnp4_target_visual">
+        <pose>0.602 0.000 0.30 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.004 0.038 0.040</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.48 0.50 0.53 1</ambient>
+          <diffuse>0.78 0.81 0.84 1</diffuse>
+          <specular>0.90 0.90 0.90 1</specular>
+        </material>
+      </visual>
+
     </link>
 
   </model>

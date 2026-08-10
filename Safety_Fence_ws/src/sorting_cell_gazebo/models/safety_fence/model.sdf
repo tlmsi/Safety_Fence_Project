@@ -266,24 +266,186 @@
       </visual>
 
       <collision name="gate_right_post_collision">
-        <pose>0.65 -1.70 0.95 0 0 0</pose>
+        <!--
+          Latch-side sensor clearance.
+
+          Gate closed edge:       x = 0.6000 m
+          Fixed-post inner face:  x = 0.6200 m
+          Clearance:                  0.0200 m
+
+          The outer post face remains at x = 0.7000 m so the
+          stationary fence geometry on this side is unchanged.
+        -->
+        <pose>0.660 -1.70 0.95 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.10 0.10 1.90</size>
+            <size>0.080 0.10 1.90</size>
           </box>
         </geometry>
       </collision>
 
       <visual name="gate_right_post_visual">
-        <pose>0.65 -1.70 0.95 0 0 0</pose>
+        <pose>0.660 -1.70 0.95 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.10 0.10 1.90</size>
+            <size>0.080 0.10 1.90</size>
           </box>
         </geometry>
         <material>
           <ambient>0.90 0.60 0.02 1</ambient>
           <diffuse>1.00 0.72 0.04 1</diffuse>
+        </material>
+      </visual>
+
+
+      <!-- ==================================================
+           FOUR PNP PROXIMITY SENSORS
+
+           Stationary side: fixed RIGHT gate post
+           Moving side:     metal targets on safety gate
+
+           20 mm available latch clearance.
+
+           Sensor body depth: 10 mm
+           Air gap:            5 mm
+           Target thickness:   4 mm
+
+           No physical contact occurs.
+           ================================================== -->
+
+      <!-- PNP1: upper closed confirmation -->
+
+      <visual name="pnp1_sensor_body_visual">
+        <pose>0.615 -1.700 1.45 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.010 0.045 0.055</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.025 0.035 0.045 1</ambient>
+          <diffuse>0.055 0.075 0.095 1</diffuse>
+          <specular>0.20 0.22 0.24 1</specular>
+        </material>
+      </visual>
+
+      <visual name="pnp1_sensing_face_visual">
+        <pose>0.6095 -1.700 1.45 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.001 0.036 0.040</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.03 0.45 0.12 1</ambient>
+          <diffuse>0.05 0.85 0.22 1</diffuse>
+          <emissive>0.02 0.16 0.05 1</emissive>
+        </material>
+      </visual>
+
+      <!-- PNP2: upper-middle closed confirmation -->
+
+      <visual name="pnp2_sensor_body_visual">
+        <pose>0.615 -1.700 1.10 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.010 0.045 0.055</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.025 0.035 0.045 1</ambient>
+          <diffuse>0.055 0.075 0.095 1</diffuse>
+          <specular>0.20 0.22 0.24 1</specular>
+        </material>
+      </visual>
+
+      <visual name="pnp2_sensing_face_visual">
+        <pose>0.6095 -1.700 1.10 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.001 0.036 0.040</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.03 0.45 0.12 1</ambient>
+          <diffuse>0.05 0.85 0.22 1</diffuse>
+          <emissive>0.02 0.16 0.05 1</emissive>
+        </material>
+      </visual>
+
+      <!-- PNP3: lower-middle closed confirmation -->
+
+      <visual name="pnp3_sensor_body_visual">
+        <pose>0.615 -1.700 0.70 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.010 0.045 0.055</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.025 0.035 0.045 1</ambient>
+          <diffuse>0.055 0.075 0.095 1</diffuse>
+          <specular>0.20 0.22 0.24 1</specular>
+        </material>
+      </visual>
+
+      <visual name="pnp3_sensing_face_visual">
+        <pose>0.6095 -1.700 0.70 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.001 0.036 0.040</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.03 0.45 0.12 1</ambient>
+          <diffuse>0.05 0.85 0.22 1</diffuse>
+          <emissive>0.02 0.16 0.05 1</emissive>
+        </material>
+      </visual>
+
+      <!-- PNP4: lower / track closed confirmation -->
+
+      <visual name="pnp4_sensor_body_visual">
+        <pose>0.615 -1.700 0.30 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.010 0.045 0.055</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.025 0.035 0.045 1</ambient>
+          <diffuse>0.055 0.075 0.095 1</diffuse>
+          <specular>0.20 0.22 0.24 1</specular>
+        </material>
+      </visual>
+
+      <visual name="pnp4_sensing_face_visual">
+        <pose>0.6095 -1.700 0.30 0 0 0</pose>
+
+        <geometry>
+          <box>
+            <size>0.001 0.036 0.040</size>
+          </box>
+        </geometry>
+
+        <material>
+          <ambient>0.03 0.45 0.12 1</ambient>
+          <diffuse>0.05 0.85 0.22 1</diffuse>
+          <emissive>0.02 0.16 0.05 1</emissive>
         </material>
       </visual>
 
