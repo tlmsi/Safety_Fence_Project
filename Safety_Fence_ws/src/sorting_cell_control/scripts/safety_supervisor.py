@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import time
+
 import rclpy
 
 from control_msgs.msg import SpeedScalingFactor
@@ -17,6 +19,11 @@ STATE_RUNNING = 'RUNNING'
 STATE_MANUAL_PAUSE = 'MANUAL_PAUSE'
 STATE_PROTECTIVE_STOP = 'PROTECTIVE_STOP'
 STATE_ESTOP = 'E_STOP'
+
+# Manual Pause and Protective Stop use the same direct
+# controller path as E-stop, but ramp the controller speed
+# smoothly to zero instead of applying an immediate halt.
+CONTROLLED_STOP_DURATION_SECONDS = 1.50
 
 
 class SafetySupervisor(Node):
@@ -37,6 +44,16 @@ class SafetySupervisor(Node):
         # Gate is initially assumed closed in the simulation.
         # The Gazebo gate sensor will later own this input.
         self.gate_open = False
+
+        # Controlled safety stop state.
+        #
+        # The public safety state may report PAUSE /
+        # PROTECTIVE_STOP immediately while the robot is still
+        # performing its permitted deceleration motion.
+        self.controlled_stop_active = False
+        self.controlled_stop_started = 0.0
+        self.controlled_stop_target_state = None
+        self.controlled_stop_reason = ''
 
         # ----------------------------------------------------
         # OUTPUTS
@@ -97,10 +114,11 @@ class SafetySupervisor(Node):
         # DIRECT E-STOP CONTROLLER PATH
         # ----------------------------------------------------
         #
-        # Manual Pause and Protective Stop keep using the
-        # normal MoveIt cancellation path.
+        # Manual Pause and Protective Stop use a controlled
+        # speed-scaling ramp before the normal MoveIt
+        # cancellation / recovery path.
         #
-        # E_STOP additionally sends speed scaling = 0.0
+        # E_STOP sends speed scaling = 0.0 immediately
         # directly to the active JointTrajectoryController.
         # This prevents trajectory progression immediately
         # while T7 performs its normal cancellation/recovery.
@@ -218,22 +236,55 @@ class SafetySupervisor(Node):
 
     def publish_state(self) -> None:
 
-        state_message = String()
-        state_message.data = self.state
+        # The existing 10 Hz safety heartbeat also drives the
+        # controlled deceleration ramp. No blocking sleep is
+        # used, so Emergency Stop can still preempt it.
+        self.update_controlled_stop()
 
-        allowed_message = Bool()
-        allowed_message.data = (
+        reported_state = self.state
+
+        if (
+            self.controlled_stop_active
+            and self.controlled_stop_target_state
+            is not None
+        ):
+            # Show the requested safety condition immediately
+            # to the GUI / stack light even though the current
+            # trajectory is still decelerating.
+            reported_state = (
+                self.controlled_stop_target_state
+            )
+
+        state_message = String()
+        state_message.data = reported_state
+
+        # During controlled deceleration the current robot
+        # trajectory is temporarily permitted to continue.
+        # T7 therefore does not cancel it until scale reaches
+        # zero. New robot movements are blocked separately in
+        # T7 by the non-RUNNING safety state.
+        motion_message = Bool()
+        motion_message.data = (
             self.state == STATE_RUNNING
+        )
+
+        # Conveyor motion stops as soon as the safety command
+        # is received; it does not wait for robot deceleration.
+        conveyor_message = Bool()
+        conveyor_message.data = (
+            self.state == STATE_RUNNING
+            and not self.controlled_stop_active
         )
 
         estop_message = Bool()
         estop_message.data = (
-            self.state == STATE_ESTOP
+            reported_state == STATE_ESTOP
         )
 
         protective_message = Bool()
         protective_message.data = (
-            self.state == STATE_PROTECTIVE_STOP
+            reported_state
+            == STATE_PROTECTIVE_STOP
         )
 
         self.state_publisher.publish(
@@ -241,11 +292,11 @@ class SafetySupervisor(Node):
         )
 
         self.motion_publisher.publish(
-            allowed_message
+            motion_message
         )
 
         self.conveyor_publisher.publish(
-            allowed_message
+            conveyor_message
         )
 
         self.estop_publisher.publish(
@@ -307,6 +358,169 @@ class SafetySupervisor(Node):
             'CONTROLLER SPEED SCALE: '
             f'{factor:.3f} [{reason}]'
         )
+
+    # ========================================================
+    # CONTROLLED SAFETY STOP
+    # ========================================================
+
+    def start_controlled_stop(
+        self,
+        target_state: str,
+        reason: str,
+    ) -> None:
+
+        if self.state == STATE_ESTOP:
+            return
+
+        if self.controlled_stop_active:
+
+            # Protective Stop has priority over an ordinary
+            # Manual Pause request.
+            if (
+                target_state
+                == STATE_PROTECTIVE_STOP
+                and self.controlled_stop_target_state
+                != STATE_PROTECTIVE_STOP
+            ):
+                self.controlled_stop_target_state = (
+                    STATE_PROTECTIVE_STOP
+                )
+
+                self.controlled_stop_reason = reason
+
+                self.get_logger().warning(
+                    'CONTROLLED STOP upgraded to '
+                    'PROTECTIVE_STOP.'
+                )
+
+                self.publish_state()
+
+            return
+
+        # If the robot is already stopped, there is no reason
+        # to execute another 1.5 second ramp.
+        if self.state != STATE_RUNNING:
+
+            self.transition(
+                target_state,
+                reason,
+            )
+
+            return
+
+        self.controlled_stop_active = True
+
+        self.controlled_stop_started = (
+            time.monotonic()
+        )
+
+        self.controlled_stop_target_state = (
+            target_state
+        )
+
+        self.controlled_stop_reason = reason
+
+        self.get_logger().warning(
+            'CONTROLLED SAFETY STOP STARTED: '
+            'controller speed will ramp '
+            f'1.000 -> 0.000 over '
+            f'{CONTROLLED_STOP_DURATION_SECONDS:.2f} s '
+            f'[{reason}]'
+        )
+
+        # Publishes the requested safety state and immediately
+        # inhibits the conveyor.
+        self.publish_state()
+
+
+    def update_controlled_stop(
+        self,
+    ) -> None:
+
+        if not self.controlled_stop_active:
+            return
+
+        elapsed = max(
+            0.0,
+            (
+                time.monotonic()
+                - self.controlled_stop_started
+            ),
+        )
+
+        progress = min(
+            1.0,
+            (
+                elapsed
+                / CONTROLLED_STOP_DURATION_SECONDS
+            ),
+        )
+
+        factor = max(
+            0.0,
+            1.0 - progress,
+        )
+
+        self.command_controller_speed_scale(
+            factor,
+            'controlled safety deceleration',
+        )
+
+        if progress < 1.0:
+            return
+
+        target_state = (
+            self.controlled_stop_target_state
+        )
+
+        reason = (
+            self.controlled_stop_reason
+            or 'controlled safety stop'
+        )
+
+        self.controlled_stop_active = False
+        self.controlled_stop_started = 0.0
+        self.controlled_stop_target_state = None
+        self.controlled_stop_reason = ''
+
+        if target_state is None:
+            target_state = STATE_MANUAL_PAUSE
+
+        previous = self.state
+        self.state = target_state
+
+        self.get_logger().warning(
+            'CONTROLLED SAFETY STOP COMPLETE: '
+            'controller speed = 0.000.'
+        )
+
+        if previous != target_state:
+
+            self.get_logger().warning(
+                'SAFETY STATE: '
+                f'{previous} -> {target_state} '
+                f'[{reason}]'
+            )
+
+
+    def cancel_controlled_stop(
+        self,
+        reason: str,
+    ) -> None:
+
+        if not self.controlled_stop_active:
+            return
+
+        self.get_logger().warning(
+            'CONTROLLED SAFETY STOP PREEMPTED: '
+            f'{reason}'
+        )
+
+        self.controlled_stop_active = False
+        self.controlled_stop_started = 0.0
+        self.controlled_stop_target_state = None
+        self.controlled_stop_reason = ''
+
 
     # ========================================================
     # GAZEBO SAFETY PANEL
@@ -409,21 +623,37 @@ class SafetySupervisor(Node):
                 'SAFETY GATE OPENED.'
             )
 
-            # Emergency stop has the highest priority.
-            # Do not downgrade E_STOP to PROTECTIVE_STOP.
-            if self.state != STATE_ESTOP:
+            # Emergency Stop remains highest priority.
+            if self.state == STATE_ESTOP:
 
-                self.transition(
+                self.get_logger().warning(
+                    'Gate opened while E-STOP is active. '
+                    'E-STOP remains the active '
+                    'highest-priority state.'
+                )
+
+                self.publish_state()
+                return
+
+            # If motion is active, decelerate through the same
+            # controller scaling path used by E-stop, but over
+            # the configured controlled-stop duration.
+            if (
+                self.state == STATE_RUNNING
+                or self.controlled_stop_active
+            ):
+
+                self.start_controlled_stop(
                     STATE_PROTECTIVE_STOP,
                     'safety gate opened',
                 )
 
             else:
 
-                self.get_logger().warning(
-                    'Gate opened while E-STOP is active. '
-                    'E-STOP remains the active '
-                    'highest-priority state.'
+                # Robot is already stopped.
+                self.transition(
+                    STATE_PROTECTIVE_STOP,
+                    'safety gate opened',
                 )
 
             return
@@ -433,7 +663,19 @@ class SafetySupervisor(Node):
             'SAFETY GATE CLOSED.'
         )
 
-        if self.state == STATE_PROTECTIVE_STOP:
+        if (
+            self.controlled_stop_active
+            and self.controlled_stop_target_state
+            == STATE_PROTECTIVE_STOP
+        ):
+
+            self.get_logger().warning(
+                'Protective stop remains requested. '
+                'Controlled deceleration will finish '
+                'and SAFETY RESET will be required.'
+            )
+
+        elif self.state == STATE_PROTECTIVE_STOP:
 
             self.get_logger().warning(
                 'Protective stop remains latched. '
@@ -464,12 +706,29 @@ class SafetySupervisor(Node):
 
             return response
 
-        if self.state == STATE_PROTECTIVE_STOP:
+        if (
+            self.state == STATE_PROTECTIVE_STOP
+            or (
+                self.controlled_stop_active
+                and self.controlled_stop_target_state
+                == STATE_PROTECTIVE_STOP
+            )
+        ):
 
             response.success = False
             response.message = (
                 'Manual Pause cannot replace an '
                 'active Protective Stop.'
+            )
+
+            return response
+
+        if self.controlled_stop_active:
+
+            response.success = True
+            response.message = (
+                'Controlled Manual Pause is already '
+                'decelerating the robot.'
             )
 
             return response
@@ -483,15 +742,17 @@ class SafetySupervisor(Node):
 
             return response
 
-        self.transition(
+        self.start_controlled_stop(
             STATE_MANUAL_PAUSE,
             'manual pause',
         )
 
         response.success = True
         response.message = (
-            'Manual pause active. '
-            'Resume may continue automation directly.'
+            'Manual Pause requested. '
+            'Robot is performing a controlled '
+            f'{CONTROLLED_STOP_DURATION_SECONDS:.1f} s '
+            'deceleration.'
         )
 
         return response
@@ -507,6 +768,16 @@ class SafetySupervisor(Node):
     ) -> Trigger.Response:
 
         del request
+
+        if self.controlled_stop_active:
+
+            response.success = False
+            response.message = (
+                'Resume denied: controlled safety '
+                'deceleration is still in progress.'
+            )
+
+            return response
 
         if self.state == STATE_ESTOP:
 
@@ -597,6 +868,10 @@ class SafetySupervisor(Node):
 
         del request
 
+        self.cancel_controlled_stop(
+            'Emergency Stop requested'
+        )
+
         # Emergency path deliberately bypasses the ordinary
         # MoveIt cancellation latency for the physical stop.
         #
@@ -632,6 +907,16 @@ class SafetySupervisor(Node):
     ) -> Trigger.Response:
 
         del request
+
+        if self.controlled_stop_active:
+
+            response.success = False
+            response.message = (
+                'Safety Reset denied: controlled '
+                'deceleration is still in progress.'
+            )
+
+            return response
 
         # ----------------------------------------------------
         # E-STOP RESET

@@ -205,6 +205,7 @@ class SortingCoordinator(
         # Fail safe until the supervisor heartbeat explicitly
         # grants motion permission.
         self.safety_motion_allowed = False
+        self.safety_state = 'UNKNOWN'
         self.safety_last_message_monotonic = 0.0
 
         self.active_goal_handle = None
@@ -215,6 +216,16 @@ class SortingCoordinator(
             Bool,
             '/safety/motion_allowed',
             self.safety_motion_callback,
+            10,
+        )
+
+        # The state topic blocks NEW goals immediately during
+        # a controlled stop. The current active goal is allowed
+        # to decelerate until motion_allowed becomes false.
+        self.create_subscription(
+            String,
+            '/safety/state',
+            self.safety_state_callback,
             10,
         )
 
@@ -342,6 +353,28 @@ class SortingCoordinator(
 
     SAFETY_HEARTBEAT_TIMEOUT = 1.50
 
+    def safety_state_callback(
+        self,
+        message: String,
+    ) -> None:
+
+        state = (
+            message.data
+            .strip()
+            .upper()
+        )
+
+        if state == self.safety_state:
+            return
+
+        previous = self.safety_state
+        self.safety_state = state
+
+        self.get_logger().info(
+            'SAFETY: supervisor state '
+            f'{previous} -> {state}'
+        )
+
     def safety_motion_callback(
         self,
         message: Bool,
@@ -468,6 +501,7 @@ class SortingCoordinator(
 
             if (
                 self.safety_motion_allowed
+                and self.safety_state == 'RUNNING'
                 and self.safety_message_is_fresh()
             ):
                 if announced:
