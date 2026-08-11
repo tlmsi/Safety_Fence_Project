@@ -15,10 +15,10 @@
     <scene>
       <ambient>0.55 0.55 0.55 1</ambient>
       <background>0.72 0.76 0.80 1</background>
-      <shadows>true</shadows>
+      <shadows>false</shadows>
     </scene>
     <light name="sun" type="directional">
-      <cast_shadows>true</cast_shadows>
+      <cast_shadows>false</cast_shadows>
       <pose>0 0 8 0 0 0</pose>
       <diffuse>0.95 0.95 0.95 1</diffuse>
       <specular>0.25 0.25 0.25 1</specular>
@@ -89,11 +89,6 @@
       <uri>models/camera_frame</uri>
       <name>camera_frame</name>
       <pose>-0.210000 1.620000 1.700000 0.000000000 0.557830676 -1.570796327</pose>
-    </include>
-    <include>
-      <uri>models/floor_markings</uri>
-      <name>floor_markings</name>
-      <pose>0 0 0 0 0 0</pose>
     </include>
     <model name="red_box">
       <pose>-0.70 0.45 0.94 0 0 0</pose>
@@ -212,100 +207,29 @@
         </collision>
       </link>
     </model>
-
-    <!-- ==================================================
-         SAFETY PANEL RUNTIME
-         ================================================== -->
-
-    <light name="safety_stack_green" type="point">
-      <pose>1.850000 -1.450000 1.480000 0 0 0</pose>
-      <cast_shadows>false</cast_shadows>
-      <diffuse>0.05 1.00 0.10 1</diffuse>
-      <specular>0.05 1.00 0.10 1</specular>
-      <intensity>0.0</intensity>
-      <attenuation>
-        <range>0.65</range>
-        <constant>0.4</constant>
-        <linear>0.8</linear>
-        <quadratic>3.0</quadratic>
-      </attenuation>
-    </light>
-
-    <light name="safety_stack_yellow" type="point">
-      <pose>1.850000 -1.450000 1.660000 0 0 0</pose>
-      <cast_shadows>false</cast_shadows>
-      <diffuse>1.00 0.72 0.02 1</diffuse>
-      <specular>1.00 0.72 0.02 1</specular>
-      <intensity>3.5</intensity>
-      <attenuation>
-        <range>0.65</range>
-        <constant>0.4</constant>
-        <linear>0.8</linear>
-        <quadratic>3.0</quadratic>
-      </attenuation>
-    </light>
-
-    <light name="safety_stack_red" type="point">
-      <pose>1.850000 -1.450000 1.840000 0 0 0</pose>
-      <cast_shadows>false</cast_shadows>
-      <diffuse>1.00 0.03 0.03 1</diffuse>
-      <specular>1.00 0.03 0.03 1</specular>
-      <intensity>0.0</intensity>
-      <attenuation>
-        <range>0.65</range>
-        <constant>0.4</constant>
-        <linear>0.8</linear>
-        <quadratic>3.0</quadratic>
-      </attenuation>
-    </light>
-
-    <plugin
-      filename="SafetyRuntime"
-      name="sorting_cell::SafetyRuntime">
+    <plugin filename="SafetyRuntime" name="sorting_cell::SafetyRuntime">
     </plugin>
-
-    <!-- END SAFETY PANEL RUNTIME -->
-
-
     <gui fullscreen="false">
-
-      <!-- Sorting-cell operator safety panel -->
       <plugin filename="SafetyPanel" name="Safety Control">
         <gz-gui>
           <title>Safety Control</title>
-
-          <property
-            type="string"
-            key="state">
+          <property type="string" key="state">
             floating
           </property>
-
-          <property
-            type="double"
-            key="width">
+          <property type="double" key="width">
             380
           </property>
-
-          <property
-            type="double"
-            key="height">
+          <property type="double" key="height">
             450
           </property>
-
-          <property
-            type="double"
-            key="x">
+          <property type="double" key="x">
             20
           </property>
-
-          <property
-            type="double"
-            key="y">
+          <property type="double" key="y">
             100
           </property>
         </gz-gui>
       </plugin>
     </gui>
-
   </world>
 </sdf>

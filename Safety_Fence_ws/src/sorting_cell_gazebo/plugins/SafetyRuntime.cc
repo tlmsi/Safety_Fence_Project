@@ -9,7 +9,6 @@
 #include <gz/math/Pose3.hh>
 
 #include <gz/msgs/boolean.pb.h>
-#include <gz/msgs/light.pb.h>
 #include <gz/msgs/stringmsg.pb.h>
 #include <gz/msgs/visual.pb.h>
 
@@ -19,8 +18,6 @@
 #include <gz/sim/Model.hh>
 #include <gz/sim/System.hh>
 
-#include <gz/sim/components/Light.hh>
-#include <gz/sim/components/LightCmd.hh>
 #include <gz/sim/components/Model.hh>
 #include <gz/sim/components/Name.hh>
 #include <gz/sim/components/Visual.hh>
@@ -251,77 +248,6 @@ private:
             *entity) != nullptr)
       {
         this->gateEntity =
-          *entity;
-      }
-    }
-
-
-    // --------------------------------------------------------
-    // Gazebo point-light entities
-    //
-    // Do NOT use:
-    //
-    //   EntityByComponents(Light(), Name(...))
-    //
-    // because components::Light contains sdf::Light, which
-    // cannot be equality-compared by EntityByComponents().
-    // --------------------------------------------------------
-
-    if (
-      this->greenLight
-      == gz::sim::kNullEntity)
-    {
-      const auto entity =
-        _ecm.EntityByName(
-          "safety_stack_green");
-
-      if (
-        entity.has_value()
-        && _ecm.Component<
-          gz::sim::components::Light>(
-            *entity) != nullptr)
-      {
-        this->greenLight =
-          *entity;
-      }
-    }
-
-
-    if (
-      this->yellowLight
-      == gz::sim::kNullEntity)
-    {
-      const auto entity =
-        _ecm.EntityByName(
-          "safety_stack_yellow");
-
-      if (
-        entity.has_value()
-        && _ecm.Component<
-          gz::sim::components::Light>(
-            *entity) != nullptr)
-      {
-        this->yellowLight =
-          *entity;
-      }
-    }
-
-
-    if (
-      this->redLight
-      == gz::sim::kNullEntity)
-    {
-      const auto entity =
-        _ecm.EntityByName(
-          "safety_stack_red");
-
-      if (
-        entity.has_value()
-        && _ecm.Component<
-          gz::sim::components::Light>(
-            *entity) != nullptr)
-      {
-        this->redLight =
           *entity;
       }
     }
@@ -813,10 +739,8 @@ private:
 
 
 private:
-  void ApplyLight(
-    gz::sim::Entity _lightEntity,
+  void ApplyIndicator(
     gz::sim::Entity _visualEntity,
-    const std::string &_name,
     double _r,
     double _g,
     double _b,
@@ -824,87 +748,45 @@ private:
     gz::sim::EntityComponentManager &_ecm)
   {
     if (
-      _lightEntity
-      != gz::sim::kNullEntity)
-    {
-      gz::msgs::Light command;
-
-      command.set_name(_name);
-      command.set_type(
-        gz::msgs::Light::POINT);
-
-      command.set_cast_shadows(false);
-
-      command.set_range(0.65);
-
-      command.set_attenuation_constant(
-        0.4);
-
-      command.set_attenuation_linear(
-        0.8);
-
-      command.set_attenuation_quadratic(
-        3.0);
-
-      command.set_intensity(
-        _on ? 3.5 : 0.0);
-
-      SetColor(
-        command.mutable_diffuse(),
-        _r,
-        _g,
-        _b);
-
-      SetColor(
-        command.mutable_specular(),
-        _r,
-        _g,
-        _b);
-
-      _ecm.SetComponentData<
-        gz::sim::components::LightCmd>(
-          _lightEntity,
-          command);
-    }
-
-    if (
       _visualEntity
-      != gz::sim::kNullEntity)
+      == gz::sim::kNullEntity)
     {
-      gz::msgs::Visual visualCommand;
-
-      visualCommand.set_id(
-        _visualEntity);
-
-      auto *material =
-        visualCommand.mutable_material();
-
-      const double scale =
-        _on ? 1.0 : 0.18;
-
-      SetColor(
-        material->mutable_ambient(),
-        _r * scale,
-        _g * scale,
-        _b * scale);
-
-      SetColor(
-        material->mutable_diffuse(),
-        _r * scale,
-        _g * scale,
-        _b * scale);
-
-      SetColor(
-        material->mutable_emissive(),
-        _on ? _r * 0.85 : 0.0,
-        _on ? _g * 0.85 : 0.0,
-        _on ? _b * 0.85 : 0.0);
-
-      _ecm.SetComponentData<
-        gz::sim::components::VisualCmd>(
-          _visualEntity,
-          visualCommand);
+      return;
     }
+
+    gz::msgs::Visual visualCommand;
+
+    visualCommand.set_id(
+      _visualEntity);
+
+    auto *material =
+      visualCommand.mutable_material();
+
+    const double scale =
+      _on ? 1.0 : 0.18;
+
+    SetColor(
+      material->mutable_ambient(),
+      _r * scale,
+      _g * scale,
+      _b * scale);
+
+    SetColor(
+      material->mutable_diffuse(),
+      _r * scale,
+      _g * scale,
+      _b * scale);
+
+    SetColor(
+      material->mutable_emissive(),
+      _on ? _r * 0.85 : 0.0,
+      _on ? _g * 0.85 : 0.0,
+      _on ? _b * 0.85 : 0.0);
+
+    _ecm.SetComponentData<
+      gz::sim::components::VisualCmd>(
+        _visualEntity,
+        visualCommand);
   }
 
 
@@ -949,30 +831,24 @@ private:
       yellow = true;
     }
 
-    this->ApplyLight(
-      this->greenLight,
+    this->ApplyIndicator(
       this->greenVisual,
-      "safety_stack_green",
       0.05,
       1.0,
       0.10,
       green,
       _ecm);
 
-    this->ApplyLight(
-      this->yellowLight,
+    this->ApplyIndicator(
       this->yellowVisual,
-      "safety_stack_yellow",
       1.0,
       0.72,
       0.02,
       yellow,
       _ecm);
 
-    this->ApplyLight(
-      this->redLight,
+    this->ApplyIndicator(
       this->redVisual,
-      "safety_stack_red",
       1.0,
       0.03,
       0.03,
@@ -1037,15 +913,6 @@ private:
   bool lastBlinkPhase{true};
 
   gz::sim::Entity gateEntity{
-    gz::sim::kNullEntity};
-
-  gz::sim::Entity greenLight{
-    gz::sim::kNullEntity};
-
-  gz::sim::Entity yellowLight{
-    gz::sim::kNullEntity};
-
-  gz::sim::Entity redLight{
     gz::sim::kNullEntity};
 
   gz::sim::Entity greenVisual{
